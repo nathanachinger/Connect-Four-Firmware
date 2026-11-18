@@ -57,6 +57,18 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LOW_BAT_LED_Pin GPIO_PIN_1
+#define LOW_BAT_LED_GPIO_Port GPIOA
+#define AMP_EN_Pin GPIO_PIN_2
+#define AMP_EN_GPIO_Port GPIOA
+#define ENCODER_SEL_Pin GPIO_PIN_5
+#define ENCODER_SEL_GPIO_Port GPIOA
+#define DISPLAY_nRST_Pin GPIO_PIN_7
+#define DISPLAY_nRST_GPIO_Port GPIOB
+#define DISPLAY_CS_Pin GPIO_PIN_8
+#define DISPLAY_CS_GPIO_Port GPIOB
+#define DISPLAY_A0_Pin GPIO_PIN_9
+#define DISPLAY_A0_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
