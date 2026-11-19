@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "app_main.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -106,7 +106,7 @@ int main(void)
   MX_SPI2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-
+  app_main(); /* never returns */
   /* USER CODE END 2 */
 
   /* Infinite loop */

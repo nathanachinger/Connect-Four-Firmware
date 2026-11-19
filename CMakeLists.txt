@@ -35,49 +35,49 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 # Enable CMake support for ASM and C/C++ languages
 enable_language(C CXX ASM)
 
-add_compile_options(
-    $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
-    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
-    $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
-)
+# Warnings for our own code (not applied to CubeMX/HAL sources)
+add_library(cf_warnings INTERFACE)
+target_compile_options(cf_warnings INTERFACE -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
 
-# Create an executable object type
-add_executable(${CMAKE_PROJECT_NAME})
-
-# Add STM32CubeMX generated sources
-add_subdirectory(cmake/stm32cubemx)
-
+# Portable layers: build for both firmware and host
+add_subdirectory(hal)
 add_subdirectory(game)
 add_subdirectory(devices)
-add_subdirectory(board)
 add_subdirectory(app)
 
-# Link directories setup
-target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined library search paths
-)
+if(CMAKE_CROSSCOMPILING)
+    # ---------------- Firmware (arm-none-eabi) ----------------
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+        $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+        $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    )
 
-# Add sources to executable
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
-)
+    # Create an executable object type
+    add_executable(${CMAKE_PROJECT_NAME})
 
-# Add include paths
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
-)
+    # Add STM32CubeMX generated sources
+    add_subdirectory(cmake/stm32cubemx)
 
-# Add project symbols (macros)
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
-)
+    # STM32-specific implementations + composition root
+    add_subdirectory(board)
 
-# Remove wrong libob.a library dependency when using cpp files
-list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
+    # Remove wrong libob.a library dependency when using cpp files
+    list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
-# Add linked libraries
-target_link_libraries(${CMAKE_PROJECT_NAME}
-    stm32cubemx
-    app
-    # Add user defined libraries
-)
+    target_link_libraries(${CMAKE_PROJECT_NAME}
+        stm32cubemx
+        board
+    )
+
+    # Emit .hex/.bin and print size after linking
+    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
+        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
+        COMMAND ${CMAKE_SIZE} $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+    )
+else()
+    # ---------------- Host (unit tests, simulator) ----------------
+    enable_testing()
+    add_subdirectory(tests)
+endif()
