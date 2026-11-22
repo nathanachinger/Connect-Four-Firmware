@@ -6,7 +6,7 @@ namespace audio {
 namespace {
 
 constexpr uint16_t kMidScale = 2048;
-constexpr uint32_t kFadeSamples = kSampleRateHz / 200;  // 5 ms
+constexpr uint32_t kFadesPerSecond = 200;  // each fade is 5 ms
 
 constexpr int16_t kSine[64] = {
         0,   201,   399,   594,   783,   965,  1137,  1299,
@@ -19,29 +19,30 @@ constexpr int16_t kSine[64] = {
     -1447, -1299, -1137,  -965,  -783,  -594,  -399,  -201,
 };
 
-void start_sample_timer() {
-    __HAL_RCC_TIM6_CLK_ENABLE();
-    TIM6->CR1 = 0;
-    TIM6->PSC = 0;
-    TIM6->ARR = SystemCoreClock / kSampleRateHz - 1;
-    TIM6->EGR = TIM_EGR_UG;
-    TIM6->SR = 0;
-    TIM6->CR1 = TIM_CR1_CEN;
+// The timer clock equals PCLK because the APB prescaler is 1.
+uint32_t sample_rate_hz() {
+    return HAL_RCC_GetPCLK1Freq() / ((htim6.Init.Prescaler + 1) * (htim6.Init.Period + 1));
 }
 
-void stop_sample_timer() { TIM6->CR1 = 0; }
+void start_sample_timer() {
+    __HAL_TIM_SET_COUNTER(&htim6, 0);
+    __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);
+    HAL_TIM_Base_Start(&htim6);
+}
+
+void stop_sample_timer() { HAL_TIM_Base_Stop(&htim6); }
 
 void wait_for_sample() {
-    while ((TIM6->SR & TIM_SR_UIF) == 0) {
+    while (__HAL_TIM_GET_FLAG(&htim6, TIM_FLAG_UPDATE) == 0) {
     }
-    TIM6->SR = 0;
+    __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);
 }
 
 void write_dac(uint16_t value) { HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, value); }
 
 // Phase increment for a 32-bit accumulator whose top 6 bits index kSine.
-uint32_t phase_step(uint32_t freq_hz) {
-    return static_cast<uint32_t>((static_cast<uint64_t>(freq_hz) << 32) / kSampleRateHz);
+uint32_t phase_step(uint32_t freq_hz, uint32_t rate_hz) {
+    return static_cast<uint32_t>((static_cast<uint64_t>(freq_hz) << 32) / rate_hz);
 }
 
 uint16_t sample(uint32_t phase, uint32_t gain) {
@@ -50,10 +51,10 @@ uint16_t sample(uint32_t phase, uint32_t gain) {
     return static_cast<uint16_t>(kMidScale + (s * static_cast<int32_t>(gain)) / 65536);
 }
 
-uint32_t envelope(uint32_t i, uint32_t total) {
+uint32_t envelope(uint32_t i, uint32_t total, uint32_t fade) {
     const uint32_t remaining = total - i;
     const uint32_t edge = i < remaining ? i : remaining;
-    return edge >= kFadeSamples ? 256 : edge * 256 / kFadeSamples;
+    return edge >= fade ? 256 : edge * 256 / fade;
 }
 
 }  // namespace
@@ -81,7 +82,9 @@ void sweep(uint32_t start_hz, uint32_t end_hz, uint32_t duration_ms, uint16_t vo
     if (volume > 256) {
         volume = 256;
     }
-    const uint32_t total = kSampleRateHz * duration_ms / 1000;
+    const uint32_t rate = sample_rate_hz();
+    const uint32_t fade = rate / kFadesPerSecond;
+    const uint32_t total = rate * duration_ms / 1000;
     if (total == 0) {
         return;
     }
@@ -94,10 +97,10 @@ void sweep(uint32_t start_hz, uint32_t end_hz, uint32_t duration_ms, uint16_t vo
         if ((i & 63u) == 0) {
             const int64_t freq = start_hz + (static_cast<int64_t>(end_hz) - start_hz) *
                                                 static_cast<int64_t>(i) / total;
-            step = phase_step(static_cast<uint32_t>(freq));
+            step = phase_step(static_cast<uint32_t>(freq), rate);
         }
         wait_for_sample();
-        write_dac(sample(phase, volume * envelope(i, total)));
+        write_dac(sample(phase, volume * envelope(i, total, fade)));
         phase += step;
     }
     write_dac(kMidScale);

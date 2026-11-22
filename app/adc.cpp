@@ -22,12 +22,17 @@ bool init() {
     if (initialized) {
         return true;
     }
-    // Long sample time: the photoresistor and battery dividers are high impedance, and
-    // VREFINT needs at least 4 us (79.5 cycles at 8 MHz = ~10 us). CubeMX default is 1.5 cycles.
-    hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_79CYCLES_5;
-    if (HAL_ADC_Init(&hadc1) != HAL_OK || HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK) {
+    // CubeMX sets a 160.5-cycle sample time (5 us at the 32 MHz ADC clock): VREFINT needs at
+    // least 4 us. Calibration can't be generated, so it runs here after each power-up.
+    if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK) {
         return false;
     }
+    // Selecting VREFINT powers its buffer, which needs up to 12 us before the first sample.
+    // The HAL doesn't wait for it.
+    if (!select(ADC_CHANNEL_VREFINT)) {
+        return false;
+    }
+    HAL_Delay(1);
     initialized = true;
     measure_vdda_mv();
     return true;

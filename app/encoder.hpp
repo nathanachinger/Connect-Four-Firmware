@@ -11,7 +11,7 @@ namespace encoder {
 // quadrature cycle per detent; check against raw counts if detents step by 2 or 1/2.
 inline constexpr int32_t kCountsPerDetent = 4;
 
-// Switches PA5 to an input (CubeMX has it as an output) and starts TIM3.
+// Starts TIM3. The timer and pins are configured in CubeMX.
 bool init();
 
 // Raw signed count since init, widened from the 16-bit timer. Call at least every ~8k counts.

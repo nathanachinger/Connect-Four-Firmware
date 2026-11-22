@@ -5,7 +5,9 @@
 namespace backlight {
 
 // LCD backlight: SI2302 low-side MOSFET, gate on PA8 driven by TIM1_CH1 PWM at 20 kHz
-// (above hearing range). Set up here because CubeMX doesn't configure TIM1 yet.
+// (above hearing range). TIM1 and the pin are configured in CubeMX.
+
+// Starts the PWM output.
 bool init();
 
 // Brightness 0..100, roughly perceptual: duty = percent^2 / 100, so low settings get

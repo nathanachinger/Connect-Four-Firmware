@@ -6,9 +6,8 @@ namespace audio {
 
 // DAC1_OUT1 (PA4) -> PAM8302 amplifier, enabled by AMP_EN (PA2).
 // Tones are generated in software: TIM6 paces samples (polled, no interrupts or DMA).
+// The sample rate is whatever TIM6 is set to in CubeMX (16 kHz: period 3999 at 64 MHz).
 // Each call blocks until the sound finishes.
-
-inline constexpr uint32_t kSampleRateHz = 16000;
 
 // Starts the DAC at mid-scale, then turns the amplifier on.
 void begin();

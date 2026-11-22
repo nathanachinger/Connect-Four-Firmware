@@ -279,7 +279,13 @@ void live(lcd::Display& screen, led::Matrix& matrix) {
         // in the dark. Smoothed so it doesn't jump with every reading.
         if (g_results.light_ok && g_results.backlight_ok) {
             const int32_t target = 10 + raw * 90 / 4095;
-            backlight_pct += (target - backlight_pct) / 4;
+            const int32_t error = target - backlight_pct;
+            // Move a quarter of the way, but at least one point, so it reaches the target.
+            if (error / 4 != 0) {
+                backlight_pct += error / 4;
+            } else if (error != 0) {
+                backlight_pct += error > 0 ? 1 : -1;
+            }
             backlight::set_percent(static_cast<uint8_t>(backlight_pct));
         }
         g_results.backlight_pct = static_cast<uint8_t>(backlight_pct);

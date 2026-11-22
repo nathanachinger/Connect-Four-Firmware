@@ -22,12 +22,6 @@ bool read_switch() {
 }  // namespace
 
 bool init() {
-    GPIO_InitTypeDef gpio = {};
-    gpio.Pin = ENCODER_SEL_Pin;
-    gpio.Mode = GPIO_MODE_INPUT;
-    gpio.Pull = GPIO_NOPULL;  // R1 is the pull-up
-    HAL_GPIO_Init(ENCODER_SEL_GPIO_Port, &gpio);
-
     __HAL_TIM_SET_COUNTER(&htim3, 0);
     last_raw = 0;
     total = 0;
