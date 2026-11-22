@@ -7,8 +7,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "toolchainFile": "${sourceDir}/cmake/gcc-arm-none-eabi.cmake",
-            "cacheVariables": {
-            }
+            "cacheVariables": {}
         },
         {
             "name": "Debug",
@@ -23,15 +22,6 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
-        },
-        {
-            "name": "host",
-            "displayName": "Host (unit tests, simulator)",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/host",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
         }
     ],
     "buildPresets": [
@@ -42,19 +32,6 @@
         {
             "name": "Release",
             "configurePreset": "Release"
-        },
-        {
-            "name": "host",
-            "configurePreset": "host"
-        }
-    ],
-    "testPresets": [
-        {
-            "name": "host",
-            "configurePreset": "host",
-            "output": {
-                "outputOnFailure": true
-            }
         }
     ]
 }

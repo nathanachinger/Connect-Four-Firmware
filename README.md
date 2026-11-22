@@ -35,23 +35,12 @@ where the current piece hovers before it drops.
 
 ## Project structure
 
-The code is split so that everything except a thin hardware layer runs on your computer as well
-as on the board. That lets the game rules, the bot and the app logic be unit tested without any
-hardware.
-
 ```
 ├─ Core/, Drivers/   STM32CubeMX generated code (main.c calls app_main())
-├─ hal/              Hardware interfaces (GPIO, clock, ...) with no code behind them
-├─ board/            STM32 implementations of hal/, and board_main.cpp, which connects everything
-├─ devices/          Drivers for the chips on the PCB, written using hal/
-├─ game/             Connect Four rules and the bot (plain C++, no hardware)
-├─ app/              Menus, game flow, sound, backlight, battery handling
-├─ tests/            Unit tests that run on your computer, plus fake versions of hal/
+├─ app/              Application code (C++, uses the STM32 HAL directly)
+├─ cmake/            Toolchain files and CubeMX CMake glue
 └─ docs/             Schematic and roadmap
 ```
-
-Only `board/` includes STM32 headers. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full
-architecture and design notes.
 
 ## Building
 
@@ -61,9 +50,6 @@ architecture and design notes.
   (`arm-none-eabi-gcc`) on your `PATH`
 - CMake 3.22 or newer
 - Ninja
-- A host C++17 compiler (Clang or GCC) for the unit tests
-
-### Firmware
 
 ```bash
 cmake --preset Debug
@@ -72,16 +58,6 @@ cmake --build --preset Debug
 
 This produces `ConnectFour.elf`, `ConnectFour.hex` and `ConnectFour.bin` in `build/Debug/`.
 Use the `Release` preset for a size-optimized build.
-
-### Unit tests (on your computer)
-
-```bash
-cmake --preset host
-cmake --build --preset host
-ctest --preset host
-```
-
-The first configure downloads GoogleTest automatically.
 
 ## Flashing
 
@@ -98,9 +74,9 @@ is kept when CubeMX regenerates.
 
 Development is tracked as milestones in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-- [x] **M0**: build system, host unit tests, firmware entry point
+- [x] **M0**: build system, firmware entry point
 - [ ] **M1**: game rules and win detection
-- [ ] **M2**: bot, and a version you can play in the terminal on your computer
+- [ ] **M2**: bot
 - [ ] **M3–M6**: hardware bring-up (LED matrix, encoder, display)
 - [ ] **M7**: first playable version (two-player)
 - [ ] **M8–M12**: one-player mode, audio, backlight, battery handling, polish

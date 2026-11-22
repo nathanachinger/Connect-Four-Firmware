@@ -35,49 +35,50 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 # Enable CMake support for ASM and C/C++ languages
 enable_language(C CXX ASM)
 
-# Warnings for our own code (not applied to CubeMX/HAL sources)
-add_library(cf_warnings INTERFACE)
-target_compile_options(cf_warnings INTERFACE -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
+# C++ settings for bare-metal firmware
+add_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+)
 
-# Portable layers: build for both firmware and host
-add_subdirectory(hal)
-add_subdirectory(game)
-add_subdirectory(devices)
-add_subdirectory(app)
+# Create an executable object type
+add_executable(${CMAKE_PROJECT_NAME})
 
-if(CMAKE_CROSSCOMPILING)
-    # ---------------- Firmware (arm-none-eabi) ----------------
-    add_compile_options(
-        $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
-        $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
-        $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
-    )
+# Add STM32CubeMX generated sources
+add_subdirectory(cmake/stm32cubemx)
 
-    # Create an executable object type
-    add_executable(${CMAKE_PROJECT_NAME})
+# Application sources
+set(APP_SOURCES
+    app/adc.cpp
+    app/app.cpp
+    app/audio.cpp
+    app/backlight.cpp
+    app/battery.cpp
+    app/display.cpp
+    app/encoder.cpp
+    app/hw_test.cpp
+    app/led_matrix.cpp
+    app/light_sensor.cpp
+)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${APP_SOURCES})
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    app
+)
+set_source_files_properties(${APP_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-Wall;-Wextra;-Wshadow;-Wconversion;-Wno-sign-conversion"
+)
 
-    # Add STM32CubeMX generated sources
-    add_subdirectory(cmake/stm32cubemx)
+# Remove wrong libob.a library dependency when using cpp files
+list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
-    # STM32-specific implementations + composition root
-    add_subdirectory(board)
+target_link_libraries(${CMAKE_PROJECT_NAME}
+    stm32cubemx
+)
 
-    # Remove wrong libob.a library dependency when using cpp files
-    list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
-
-    target_link_libraries(${CMAKE_PROJECT_NAME}
-        stm32cubemx
-        board
-    )
-
-    # Emit .hex/.bin and print size after linking
-    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
-        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
-        COMMAND ${CMAKE_SIZE} $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
-    )
-else()
-    # ---------------- Host (unit tests, simulator) ----------------
-    enable_testing()
-    add_subdirectory(tests)
-endif()
+# Emit .hex/.bin and print size after linking
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
+    COMMAND ${CMAKE_SIZE} $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+)

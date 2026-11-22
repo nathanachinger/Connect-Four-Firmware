@@ -23,27 +23,13 @@ Notes:
 - PA5 is not a WKUP pin, so leaving Shutdown requires a power cycle (S2) or reset.
 - The 7×7 grid = 1 cursor row on top + standard 6×7 Connect Four board.
 
-## Layering
+## Layout
 
 ```
 ConnectFour/
 ├─ Core/ Drivers/ cmake/stm32cubemx   # CubeMX-owned; only USER CODE hooks in main.c call app_main()
-├─ hal/        # Pure interfaces (header-only): GpioOut/In, Clock, I2cBus, SpiBus, Adc, Pwm, DacStream, ...
-├─ board/      # STM32 implementations of hal/ + composition root (board_main.cpp → app_main()).
-│              #   The ONLY place that includes stm32g0xx_hal.h / main.h.
-├─ devices/    # Chip drivers against hal/: is31fl3731, st7565, canvas + font
-├─ game/       # Pure logic: bitboard, rules, win detection, bot. No hardware, no hal.
-├─ app/        # App state machine, input (detents, button gestures), services
-│              #   (backlight, battery, power, audio, LED renderer), UI screens
-├─ sim/        # Host executable: play vs bot in terminal, bot-vs-bot, benchmarks   (M2)
-└─ tests/      # Host unit tests (GoogleTest) + fakes for hal/
+└─ app/        # All application code: game logic, bot, chip drivers, input, UI, services
 ```
-
-Dependency rules (enforced by CMake target links):
-- `game`, `hal`: depend on nothing.
-- `devices` → `hal`. `app` → `game`, `devices`, `hal`.
-- `board` → `hal`, `app`, `stm32cubemx`. Only the firmware links `board`.
-- Host builds (`tests`, `sim`) link everything except `board`, substituting fakes.
 
 Runtime model: bare-metal superloop, 1 ms SysTick time base, no heap, no exceptions/RTTI.
 Audio runs on DMA and the encoder count lives in hardware, so a long bot search never drops input or sound.
@@ -51,25 +37,24 @@ Audio runs on DMA and the encoder count lives in hardware, so a long bot search 
 ## Builds
 
 ```bash
-cmake --preset Debug && cmake --build --preset Debug        # firmware (arm-none-eabi)
-cmake --preset host && cmake --build --preset host && ctest --preset host   # host tests
+cmake --preset Debug && cmake --build --preset Debug
 ```
 
 ## Milestones
 
 | # | Goal | Done when |
 |---|------|-----------|
-| 0 | Build foundation: target + host CMake, test framework, `app_main()` hook, CubeMX fixes | Firmware builds and blinks LOW_BAT_LED; host `ctest` passes |
-| 1 | `game/`: board, drop, legal moves, win/draw detection, winning cells | Unit tests cover all 4 win directions, full columns, draws |
-| 2 | `game/bot` + `sim/` terminal play | Play bot on host; bot-vs-bot shows difficulty ordering; nodes/sec measured |
-| 3 | `hal/` + `board/` bring-up: clock, GPIO, I2C, SPI, ADC, encoder timer | Each verified on hardware |
-| 4 | IS31FL3731 driver + LED map + renderer | Test pattern correct; position from tests renders right |
-| 5 | Input: detent accumulator + button gestures + event queue | Unit tests for timing edges; cursor moves on hardware |
+| 0 | Build foundation: CMake, `app_main()` hook, CubeMX fixes | Firmware builds and blinks LOW_BAT_LED |
+| 1 | Game rules: board, drop, legal moves, win/draw detection, winning cells | All 4 win directions, full columns, draws work |
+| 2 | Bot | Difficulty levels behave as expected; nodes/sec measured |
+| 3 | Peripheral bring-up: clock, GPIO, I2C, SPI, ADC, encoder timer | Each verified on hardware |
+| 4 | IS31FL3731 driver + LED map + renderer | Test pattern correct; known positions render right |
+| 5 | Input: detent accumulator + button gestures + event queue | Timing edges handled; cursor moves on hardware |
 | 6 | ST7565 driver + canvas + font + menu screen | 1P/2P menu renders and scrolls |
 | 7 | App state machine, 2-player pass-and-play | **First playable**: full game, win highlight, hold → menu |
 | 8 | 1-player on target | Bot moves within time budget with thinking indicator; difficulty select |
 | 9 | Audio: TIM6 + DMA + synth + sound events | Menu/rotate/click/win/lose cues, no pops |
-| 10 | Auto backlight | Smooth tracking of room light; unit-tested with fake ADC |
+| 10 | Auto backlight | Smooth tracking of room light |
 | 11 | Battery monitor + low LED + cutoff + Shutdown | Bench-supply sweep; sleep current measured |
 | 12 | Polish: animations, IWDG watchdog, flash budget, optional settings persistence | Release build fits comfortably |
 
@@ -82,8 +67,8 @@ cmake --preset host && cmake --build --preset host && ctest --preset host   # ho
 - **Bot**: 49-bit bitboard in `uint64_t`, negamax + alpha-beta, center-first ordering,
   iterative deepening with deadline callback; optional 4–8 KB transposition table.
   Difficulty: easy (random but takes/blocks wins), medium (depth ~4), hard (time-budgeted).
-  RNG injected (ADC-noise seed on target, fixed seed on host).
-- **LED renderer**: `(row, col, color) → driver index` table in `board/`, transcribed from the schematic;
+  RNG seeded from ADC noise.
+- **LED renderer**: `(row, col, color) → driver index` table, transcribed from the schematic;
   LED-walk test mode to verify. Use IS31 frames for tear-free double buffering. Red+yellow = orange highlight.
 - **Backlight**: EMA-filtered ambient → perceptual LUT → slew-limited, hysteretic duty. Reuse ambient
   level to scale LED matrix PWM.
