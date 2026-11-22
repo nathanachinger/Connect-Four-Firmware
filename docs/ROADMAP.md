@@ -83,10 +83,10 @@ cmake --preset Debug && cmake --build --preset Debug
 
 User code in `USER CODE` blocks survives regeneration.
 
-- [ ] **PA5 ENCODER_SEL** → `GPIO_Input`, no pull (R1 is the pull-up). Currently configured as output.
-- [ ] **Clock** → SYSCLK from PLLR = 64 MHz (PLL is already set up for 64 MHz but HSI16 is selected).
-- [ ] **TIM1 CH1 (PA8)** → PWM Generation CH1 for backlight. At 64 MHz: PSC = 0, ARR = 3199 → 20 kHz.
+- [x] **PA5 ENCODER_SEL** → `GPIO_Input`, no pull (R1 is the pull-up).
+- [x] **Clock** → SYSCLK from PLLR = 64 MHz.
+- [x] **TIM1 CH1 (PA8)** → PWM Generation CH1 for backlight. At 64 MHz: PSC = 0, ARR = 3199 → 20 kHz.
 - [ ] **TIM6** → used as DAC trigger: Trigger Event Selection = Update Event (period set in code later).
 - [ ] **DAC1 OUT1** → Trigger = Timer 6 Trigger Out event; add DMA request DAC1_CH1, circular, half-word.
 - [ ] **ADC1** → scan IN0, IN8, VREFINT; consider DMA or polled sequence; long sample time (high-Z sources).
-- [ ] Confirm **I2C1** timing is 400 kHz Fast Mode for the new clock.
+- [x] Confirm **I2C1** timing is 400 kHz Fast Mode for the new clock.

@@ -61,15 +61,8 @@ bool Display::data(const uint8_t* bytes, uint16_t len) {
 bool Display::init() {
     ok_ = false;
 
-    // CubeMX set SPI2 to 4-bit frames. ST7565R: mode 0 or 3, MSB first, up to ~20 MHz.
-    hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
-    hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;  // 4 MHz at 16 MHz PCLK
-    hspi2.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
-    if (HAL_SPI_Init(&hspi2) != HAL_OK) {
-        return false;
-    }
-
-    cs(false);
+    // SPI2 (mode 0, 8-bit, 2 MHz) and CS idle-high come from CubeMX. Don't raise the SPI clock
+    // without also raising the PB10/PB11 GPIO speed: "Low" is rated for about 2 MHz.
     HAL_GPIO_WritePin(DISPLAY_nRST_GPIO_Port, DISPLAY_nRST_Pin, GPIO_PIN_RESET);
     HAL_Delay(2);
     HAL_GPIO_WritePin(DISPLAY_nRST_GPIO_Port, DISPLAY_nRST_Pin, GPIO_PIN_SET);

@@ -15,7 +15,7 @@ inline constexpr uint8_t kCharWidth = 6;
 // The backlight is separate: see backlight.hpp.
 class Display {
 public:
-    // Reconfigures SPI2 for 8-bit frames, resets the controller and turns the display on.
+    // Resets the controller and turns the display on.
     bool init();
 
     // Electronic volume, 0..63. Higher = darker.
