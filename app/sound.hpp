@@ -10,8 +10,8 @@ namespace sound {
 // Priorities keep important sounds from being cut off: a new sound only interrupts one of the
 // same or lower priority (turning ticks < clicks < game results).
 //
-// The amp is switched on for the first sound and off after kAmpIdleMs of quiet, so it isn't
-// powered (or hissing) while nothing plays. Switching it on takes ~55 ms, so the first sound
+// The amp is switched on for the first sound and off after kAmpIdleMs (0.3 s) of quiet, so it
+// isn't powered (or picking up noise) while nothing plays. Switching it on takes ~55 ms, so the first sound
 // after a pause starts that much late.
 enum class Id : uint8_t {
     MenuMove,       // highlight moved

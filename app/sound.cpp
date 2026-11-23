@@ -6,7 +6,9 @@
 namespace sound {
 namespace {
 
-constexpr uint32_t kAmpIdleMs = 3000;
+// Short, so the amp isn't left on amplifying supply noise (e.g. LED updates when the cursor
+// blinks) between sounds. The cost: a sound after a pause waits ~55 ms for the amp to power up.
+constexpr uint32_t kAmpIdleMs = 300;
 
 // One note: a sweep from `from` to `to` Hz (equal for a plain tone), or a rest when from == 0.
 struct Note {
