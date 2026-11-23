@@ -177,6 +177,12 @@ void Display::invert_line(uint8_t line, uint8_t x, uint8_t w) {
     }
 }
 
+void Display::sleep() {
+    const uint8_t seq[] = {kCmdDisplayOff, kCmdAllPixelsOn};
+    commands(seq, sizeof seq);
+    ok_ = false;
+}
+
 bool Display::show() {
     if (!ok_) {
         return false;

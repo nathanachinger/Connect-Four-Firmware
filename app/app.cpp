@@ -10,6 +10,7 @@
 #include "match.hpp"
 #include "menu.hpp"
 #include "peripherals.hpp"
+#include "power.hpp"
 #include "settings.hpp"
 #include "settings_screen.hpp"
 
@@ -18,6 +19,8 @@ namespace {
 constexpr uint32_t kLoopMs = 2;  // input poll rate; well under the 20 ms debounce
 constexpr uint32_t kStartupMs = 1500;  // startup screen; a click skips it
 constexpr uint8_t kLowBatteryPercent = 10;
+constexpr uint32_t kAutoOffMs = 2 * 60 * 1000;  // no input for this long -> shut down
+constexpr uint32_t kAutoOffNoticeMs = 1500;     // "AUTO OFF" message before going dark
 
 constexpr menu::Item kMainItems[] = {
     {"1 PLAYER", menu::Choice::OnePlayer, true},
@@ -65,6 +68,22 @@ void centered(lcd::Display& screen, uint8_t line, const char* text) {
     const auto width = static_cast<uint32_t>(len) * lcd::kCharWidth;
     screen.text(static_cast<uint8_t>(width < lcd::kWidth ? (lcd::kWidth - width) / 2 : 0), line,
                 text);
+}
+
+bool is_activity(const input::Events& in) {
+    return in.steps != 0 || in.button_down || in.gesture != input::Gesture::None;
+}
+
+// Says why it went dark, then turns everything off until the next power cycle.
+[[noreturn]] void auto_off(led::Matrix& matrix, lcd::Display& screen) {
+    matrix.clear();
+    matrix.show();
+    screen.clear();
+    centered(screen, 1, "AUTO OFF");
+    centered(screen, 2, "POWER CYCLE TO WAKE");
+    screen.show();
+    HAL_Delay(kAutoOffNoticeMs);
+    power::shut_down(matrix, screen);
 }
 
 // Title and battery estimate. Read before the LEDs light, while the pack is lightly loaded.
@@ -132,6 +151,7 @@ extern "C" void app_main(void) {
     static match::Game game(matrix, screen, match::Platform{HAL_GetTick, poll_input});
     static settings_screen::Screen settings_page(matrix, screen);
 
+    power::init();
     backlight::init();
     light::init();
     settings::init();
@@ -144,10 +164,16 @@ extern "C" void app_main(void) {
     enum class Mode : uint8_t { MainMenu, LevelMenu, Match, Settings };
     Mode mode = Mode::MainMenu;
     main_menu.start();
+    uint32_t last_input_ms = HAL_GetTick();
 
     for (;;) {
         const input::Events in = input::poll();
         const uint32_t now = HAL_GetTick();
+        if (is_activity(in)) {
+            last_input_ms = now;
+        } else if (now - last_input_ms >= kAutoOffMs) {
+            auto_off(matrix, screen);
+        }
         switch (mode) {
             case Mode::MainMenu:
                 switch (main_menu.update(in)) {

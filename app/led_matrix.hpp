@@ -28,6 +28,9 @@ public:
 
     bool show();
 
+    // Software shutdown: all LEDs off, the chip idles at a few uA. Only init() brings it back.
+    void shutdown();
+
 private:
     static constexpr uint8_t kPwmCount = 144;
 

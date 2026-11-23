@@ -39,6 +39,10 @@ public:
 
     bool show();
 
+    // Sleep (power save): display off with all points on, per the ST7565R datasheet. Draws a few
+    // uA. Only init() brings it back.
+    void sleep();
+
 private:
     bool command(uint8_t cmd);
     bool commands(const uint8_t* cmds, uint16_t len);

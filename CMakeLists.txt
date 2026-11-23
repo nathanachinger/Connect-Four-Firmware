@@ -64,6 +64,7 @@ set(APP_SOURCES
     app/light_sensor.cpp
     app/match.cpp
     app/menu.cpp
+    app/power.cpp
     app/settings.cpp
     app/settings_screen.cpp
 )

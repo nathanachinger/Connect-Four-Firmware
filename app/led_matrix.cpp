@@ -99,6 +99,12 @@ void Matrix::set(uint8_t row, uint8_t col, Color color, uint8_t brightness) {
     }
 }
 
+void Matrix::shutdown() {
+    select_page(kPageFunction);
+    write_reg(kRegShutdown, 0x00);
+    ok_ = false;
+}
+
 bool Matrix::show() { return ok_ && write_regs(kRegPwm, pwm_, kPwmCount); }
 
 }  // namespace led
