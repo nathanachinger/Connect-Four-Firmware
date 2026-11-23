@@ -7,19 +7,6 @@
 namespace menu {
 namespace {
 
-struct Item {
-    const char* label;
-    Choice choice;
-    bool enabled;  // disabled items show but can't be chosen
-};
-
-constexpr Item kItems[] = {
-    {"1 PLAYER  (SOON)", Choice::OnePlayer, false},
-    {"2 PLAYER", Choice::TwoPlayer, true},
-    {"SETTINGS  (SOON)", Choice::Settings, false},
-};
-constexpr uint8_t kItemCount = sizeof(kItems) / sizeof(kItems[0]);
-
 constexpr uint8_t kFirstItemLine = 0;
 constexpr uint8_t kVisible = 3;  // lines 0-2; line 3 is the hint
 constexpr uint8_t kLabelX = 2 * lcd::kCharWidth;
@@ -40,9 +27,12 @@ void Menu::start() {
 }
 
 Choice Menu::update(const input::Events& in) {
+    if (in.gesture == input::Gesture::Hold) {
+        return Choice::Back;
+    }
     if (in.steps != 0) {
         int32_t s = selected_ + in.steps;
-        s = s < 0 ? 0 : (s >= kItemCount ? kItemCount - 1 : s);
+        s = s < 0 ? 0 : (s >= count_ ? count_ - 1 : s);
         if (s != selected_) {
             selected_ = static_cast<uint8_t>(s);
             // Scroll just enough to keep the selection visible.
@@ -55,23 +45,23 @@ Choice Menu::update(const input::Events& in) {
         }
     }
 
-    if (in.gesture == input::Gesture::Click && kItems[selected_].enabled) {
-        return kItems[selected_].choice;
+    if (in.gesture == input::Gesture::Click && items_[selected_].enabled) {
+        return items_[selected_].choice;
     }
     return Choice::None;
 }
 
 void Menu::render_screen() {
     screen_.clear();
-    for (uint8_t i = 0; i < kVisible && top_ + i < kItemCount; ++i) {
+    for (uint8_t i = 0; i < kVisible && top_ + i < count_; ++i) {
         const uint8_t item = top_ + i;
         const auto line = static_cast<uint8_t>(kFirstItemLine + i);
-        screen_.text(kLabelX, line, kItems[item].label);
+        screen_.text(kLabelX, line, items_[item].label);
         if (item == selected_) {
             screen_.invert_line(line);
         }
     }
-    centered(screen_, 3, "TURN=SELECT CLICK=OK");
+    centered(screen_, 3, hint_);
     screen_.show();
 }
 

@@ -56,13 +56,14 @@ set(APP_SOURCES
     app/backlight.cpp
     app/battery.cpp
     app/board.cpp
+    app/bot.cpp
     app/display.cpp
     app/encoder.cpp
     app/input.cpp
     app/led_matrix.cpp
     app/light_sensor.cpp
+    app/match.cpp
     app/menu.cpp
-    app/two_player.cpp
 )
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${APP_SOURCES})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
@@ -71,6 +72,9 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 set_source_files_properties(${APP_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-Wall;-Wextra;-Wshadow;-Wconversion;-Wno-sign-conversion"
 )
+# The bot's search is the one hot loop; optimize it even in Debug builds (-O0 is several times
+# slower). Appended so it lands after the build type's -O0.
+set_property(SOURCE app/bot.cpp APPEND PROPERTY COMPILE_OPTIONS "-O2")
 
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)

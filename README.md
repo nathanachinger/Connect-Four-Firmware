@@ -76,7 +76,8 @@ Development is tracked as milestones in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 - [x] **M0**: build system, firmware entry point
 - [x] **M1**: game rules and win detection
-- [ ] **M2**: bot
+- [x] **M2**: bot (negamax with alpha-beta; easy, medium and hard)
 - [ ] **M3–M6**: hardware bring-up (LED matrix, encoder, display)
 - [x] **M7**: first playable version (two-player): menu, pass-and-play, hold to return to menu
-- [ ] **M8–M12**: one-player mode, audio, backlight, battery handling, polish
+- [x] **M8**: one-player mode against the bot
+- [ ] **M9–M12**: audio, backlight, battery handling, polish
