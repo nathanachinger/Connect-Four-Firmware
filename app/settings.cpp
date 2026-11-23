@@ -1,6 +1,7 @@
 #include "settings.hpp"
 
 #include "backlight.hpp"
+#include "flash_store.hpp"
 #include "light_sensor.hpp"
 
 namespace settings {
@@ -24,6 +25,9 @@ constexpr uint8_t kMinPercent = 10;     // keep the screen readable in the dark
 constexpr uint8_t kMinLedPwm = 4;       // dimmest LED level that's still clearly lit
 constexpr uint16_t kMaxGain = 128;      // half the DAC swing: loud, without clipping the amp
 
+// Bump when the saved layout changes; older records are then ignored (defaults are used).
+constexpr uint8_t kRecordVersion = 1;
+
 Values g_values;
 uint8_t g_auto_percent = 80;  // auto level being shown
 uint8_t g_percent = 0;        // what the backlight and LEDs are set to now
@@ -37,6 +41,27 @@ uint32_t g_next_sample_ms = 0;
 }  // namespace
 
 Values& values() { return g_values; }
+
+void load() {
+    uint8_t p[flash_store::kPayloadBytes];
+    if (!flash_store::load(flash_store::internal(), kRecordVersion, p)) {
+        return;
+    }
+    Values v;
+    v.auto_brightness = (p[0] & 1) != 0;
+    v.brightness = p[1];
+    v.volume = p[2];
+    if (v.brightness >= 1 && v.brightness <= kMaxLevel && v.volume <= kMaxLevel) {
+        g_values = v;
+    }
+}
+
+bool save() {
+    const uint8_t p[flash_store::kPayloadBytes] = {
+        static_cast<uint8_t>(g_values.auto_brightness ? 1 : 0), g_values.brightness,
+        g_values.volume, 0, 0};
+    return flash_store::save(flash_store::internal(), kRecordVersion, p);
+}
 
 uint8_t led_pwm_for_percent(uint8_t percent) {
     const uint32_t pwm = 255u * percent * percent / 10000u;

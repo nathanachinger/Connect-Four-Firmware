@@ -7,7 +7,7 @@ namespace settings {
 inline constexpr uint8_t kMaxLevel = 10;
 
 // Brightness applies to both the LCD backlight and the LED board.
-// Values live in RAM and reset to the defaults at power-up.
+// Saved in flash (see flash_store.hpp) and restored at power-up.
 struct Values {
     bool auto_brightness = true;  // follow the room light (photoresistor)
     uint8_t brightness = 7;       // manual level, 1..kMaxLevel
@@ -15,6 +15,12 @@ struct Values {
 };
 
 Values& values();
+
+// Restores the saved values, if there are any valid ones; otherwise keeps the defaults.
+void load();
+// Saves the current values (no flash write if they haven't changed). Returns false on a flash
+// error. The CPU stalls for up to ~25 ms while flash is written.
+bool save();
 
 // Reads the light sensor once so auto brightness starts at the right level instead of ramping.
 void init();

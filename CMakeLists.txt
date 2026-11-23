@@ -59,6 +59,8 @@ set(APP_SOURCES
     app/bot.cpp
     app/display.cpp
     app/encoder.cpp
+    app/flash_store.cpp
+    app/flash_store_hal.cpp
     app/input.cpp
     app/led_matrix.cpp
     app/light_sensor.cpp
@@ -78,6 +80,12 @@ set_source_files_properties(${APP_SOURCES} PROPERTIES
 # The bot's search is the one hot loop; optimize it even in Debug builds (-O0 is several times
 # slower). Appended so it lands after the build type's -O0.
 set_property(SOURCE app/bot.cpp APPEND PROPERTY COMPILE_OPTIONS "-O2")
+
+# Fail the build if code ever grows into the flash page that stores settings.
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DELF=$<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+            -P ${CMAKE_SOURCE_DIR}/cmake/check_settings_page.cmake
+)
 
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)

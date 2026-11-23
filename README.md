@@ -64,6 +64,12 @@ Use the `Release` preset for a size-optimized build.
 Connect a debug probe to the SWD header and flash `build/Debug/ConnectFour.elf` with any
 SWD-capable tool, such as STM32CubeProgrammer, STM32CubeIDE, or SEGGER J-Link and Ozone.
 
+- Settings are saved in the last 2 KB page of flash (`0x0800F800`). Normal programming only
+  erases the pages the firmware uses, so settings survive reflashing; a full-chip erase resets
+  them to the defaults. The build fails if the firmware ever grows into that page.
+- After auto off the chip is in Shutdown mode and the probe can't connect. Power cycle the
+  board first, or use the programmer's connect-under-reset mode.
+
 ## Changing the hardware configuration
 
 Pins and peripherals are set up in STM32CubeMX using `ConnectFour.ioc`. After changing them,

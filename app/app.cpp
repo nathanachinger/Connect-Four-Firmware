@@ -70,12 +70,24 @@ void centered(lcd::Display& screen, uint8_t line, const char* text) {
                 text);
 }
 
+// Flash writes need a steady supply; skip saving once the pack is at the 4.0 V cutoff, where a
+// sagging rail could cut a write short. (0 means the ADC read failed; save anyway.)
+constexpr uint32_t kMinSaveMv = 4000;
+
+void save_settings() {
+    const uint32_t mv = battery::read_mv();
+    if (mv == 0 || mv >= kMinSaveMv) {
+        settings::save();
+    }
+}
+
 bool is_activity(const input::Events& in) {
     return in.steps != 0 || in.button_down || in.gesture != input::Gesture::None;
 }
 
 // Says why it went dark, then turns everything off until the next power cycle.
 [[noreturn]] void auto_off(led::Matrix& matrix, lcd::Display& screen) {
+    save_settings();  // in case it timed out on the settings screen
     matrix.clear();
     matrix.show();
     screen.clear();
@@ -154,8 +166,9 @@ extern "C" void app_main(void) {
     power::init();
     backlight::init();
     light::init();
+    settings::load();
     settings::init();
-    settings::update(HAL_GetTick());  // backlight on at the room-matched level
+    settings::update(HAL_GetTick());  // backlight on at the saved or room-matched level
     screen.init();
     input::init();
     show_startup(screen);
@@ -218,6 +231,7 @@ extern "C" void app_main(void) {
 
             case Mode::Settings:
                 if (!settings_page.update(in, now)) {
+                    save_settings();
                     main_menu.start();
                     mode = Mode::MainMenu;
                 }
