@@ -6,15 +6,32 @@ LCD, and a rotary encoder handles all input.
 
 ## Features
 
-- **One-player mode** against a bot with selectable difficulty
-- **Two-player mode** with pass and play
-- **Rotary encoder controls**: turn to move your piece along the top row, click to drop it,
-  hold to return to the menu
-- **LCD menu** for choosing a mode, and a turn display during a game
-- **Automatic backlight** that follows room brightness, read from a photoresistor
-- **Sound effects** for menu navigation, turning, clicking, wins and losses
-- **Battery monitoring** with a low-battery LED, and an automatic cutoff that puts the device
-  into a low-power state before the batteries run too low
+- **One-player mode** against a bot: Easy, Medium or Hard. The bot shows a "thinking" sweep,
+  then slides its piece over and drops it
+- **Two-player mode** with pass and play; the other player starts the next game
+- **LED board**: the aiming piece blinks along the top row, pieces fall into place, and the
+  winning line blinks
+- **LCD menus** for mode, difficulty and settings, and a turn display during a game
+- **Automatic brightness** for both the backlight and the LEDs, following room light from a
+  photoresistor; it ignores your hand passing over the sensor
+- **Sound effects** for menus, turning, dropping, landing and game results
+- **Settings**: brightness (auto or 1–10), sound effects on/off and debug mode, saved across
+  power cycles
+- **Battery estimate** on the startup screen, with a low-battery warning
+- **Auto off** after 2 minutes without input, into the MCU's lowest-power mode until the next
+  power cycle
+- **Debug mode**: the bot's search stats in 1-player games and who is ahead in either mode
+
+Planned: battery monitoring during play, with the low-battery LED and an automatic cutoff
+(see [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+## Controls
+
+| Action | Menu | Game |
+|---|---|---|
+| Turn | Move the highlight | Move your piece along the top row |
+| Click | Choose | Drop the piece; after a game, play again |
+| Hold (1.5 s) | Back | Return to the main menu |
 
 ## Hardware
 
@@ -83,8 +100,11 @@ Development is tracked as milestones in [docs/ROADMAP.md](docs/ROADMAP.md).
 - [x] **M0**: build system, firmware entry point
 - [x] **M1**: game rules and win detection
 - [x] **M2**: bot (negamax with alpha-beta; easy, medium and hard)
-- [ ] **M3–M6**: hardware bring-up (LED matrix, encoder, display)
-- [x] **M7**: first playable version (two-player): menu, pass-and-play, hold to return to menu
+- [x] **M3–M6**: hardware bring-up, LED matrix, input, display and menus
+- [x] **M7**: first playable version (two-player)
 - [x] **M8**: one-player mode against the bot
-- [x] **M9**: sound effects for menus, turning, clicking and game results
-- [ ] **M10–M12**: backlight, battery handling, polish
+- [x] **M9**: sound effects
+- [x] **M10**: automatic brightness
+- [ ] **M11**: battery handling (startup estimate and auto off done; in-game monitoring, low-battery
+  LED and cutoff to do)
+- [ ] **M12**: polish (settings persistence done; watchdog to do)
