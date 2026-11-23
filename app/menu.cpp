@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "sound.hpp"
+
 namespace menu {
 namespace {
 
@@ -22,7 +24,7 @@ void Menu::start() {
     render_leds();
 }
 
-Choice Menu::update(const input::Events& in) {
+Choice Menu::update(const input::Events& in, uint32_t now_ms) {
     if (in.gesture == input::Gesture::Hold) {
         return Choice::Back;
     }
@@ -38,10 +40,16 @@ Choice Menu::update(const input::Events& in) {
                 top_ = static_cast<uint8_t>(selected_ - kVisible + 1);
             }
             render_screen();
+            sound::play(sound::Id::MenuMove, now_ms);
         }
     }
 
-    if (in.gesture == input::Gesture::Click && items_[selected_].enabled) {
+    if (in.gesture == input::Gesture::Click) {
+        if (!items_[selected_].enabled) {
+            sound::play(sound::Id::Blocked, now_ms);
+            return Choice::None;
+        }
+        sound::play(sound::Id::MenuSelect, now_ms);
         return items_[selected_].choice;
     }
     return Choice::None;

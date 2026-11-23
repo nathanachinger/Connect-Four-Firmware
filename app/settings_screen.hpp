@@ -8,10 +8,10 @@
 
 namespace settings_screen {
 
-// Brightness (AUTO or 1-10) and volume (OFF or 1-10).
-// Turn to pick a setting, click to edit it, turn to change it, click to finish. Hold goes back.
-// Changes apply immediately: the bottom LED row lights as a brightness sample, and each volume
-// change plays a short beep at the new level.
+// Brightness (AUTO or 1-10) and sound effects (ON or OFF).
+// Turn to pick a setting. Brightness: click to edit, turn to change, click to finish. Sound
+// effects: click switches it. Hold goes back. Changes apply immediately: the bottom LED row lights
+// as a brightness sample, and switching sound on plays a chirp.
 class Screen {
 public:
     Screen(led::Matrix& matrix, lcd::Display& screen) : matrix_(matrix), screen_(screen) {}
@@ -22,19 +22,15 @@ public:
 
 private:
     void adjust(int32_t steps, uint32_t now_ms);
-    void beep(uint32_t now_ms);
-    void stop_sound();
 
     void render_screen();
     void render_leds();
 
     led::Matrix& matrix_;
     lcd::Display& screen_;
-    uint8_t selected_ = 0;  // 0 = brightness, 1 = volume
+    uint8_t selected_ = 0;  // 0 = brightness, 1 = sound effects
     bool editing_ = false;
     uint8_t shown_pwm_ = 0;
-    bool amp_on_ = false;
-    uint32_t last_sound_ms_ = 0;
 };
 
 }  // namespace settings_screen

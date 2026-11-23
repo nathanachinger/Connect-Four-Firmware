@@ -2,8 +2,8 @@
 
 #include <cstring>
 
-#include "audio.hpp"
 #include "settings.hpp"
+#include "sound.hpp"
 
 namespace settings_screen {
 namespace {
@@ -12,9 +12,6 @@ constexpr uint8_t kItemCount = 2;
 constexpr uint8_t kLabelX = 2 * lcd::kCharWidth;
 constexpr uint8_t kValueEndX = lcd::kWidth - lcd::kCharWidth;  // right edge of the value text
 
-constexpr uint32_t kBeepHz = 1047;  // C6
-constexpr uint32_t kBeepMs = 70;
-constexpr uint32_t kAmpIdleMs = 800;  // amp off after this long without a beep
 
 void centered(lcd::Display& screen, uint8_t line, const char* text) {
     const auto width = static_cast<uint32_t>(std::strlen(text)) * lcd::kCharWidth;
@@ -22,7 +19,7 @@ void centered(lcd::Display& screen, uint8_t line, const char* text) {
     screen.text(x, line, text);
 }
 
-// "AUTO", "OFF" or "1".."10" into buf.
+// "AUTO" or "1".."10" into buf.
 void format_level(char* buf, uint8_t level, const char* zero_name) {
     if (level == 0) {
         std::strcpy(buf, zero_name);
@@ -46,12 +43,23 @@ void Screen::start() {
 
 bool Screen::update(const input::Events& in, uint32_t now_ms) {
     if (in.gesture == input::Gesture::Hold) {
-        stop_sound();
         return false;
     }
 
     if (in.gesture == input::Gesture::Click) {
-        editing_ = !editing_;
+        if (selected_ == 1) {
+            // On/off needs no edit step: a click switches it.
+            settings::Values& v = settings::values();
+            v.sound_effects = !v.sound_effects;
+            if (v.sound_effects) {
+                sound::play(sound::Id::SoundOn, now_ms);
+            } else {
+                sound::stop();  // cut anything still playing; silence confirms it's off
+            }
+        } else {
+            editing_ = !editing_;
+            sound::play(sound::Id::MenuSelect, now_ms);
+        }
         render_screen();
     } else if (in.steps != 0) {
         if (editing_) {
@@ -62,6 +70,7 @@ bool Screen::update(const input::Events& in, uint32_t now_ms) {
             if (s != selected_) {
                 selected_ = static_cast<uint8_t>(s);
                 render_screen();
+                sound::play(sound::Id::MenuMove, now_ms);
             }
         }
     }
@@ -70,59 +79,32 @@ bool Screen::update(const input::Events& in, uint32_t now_ms) {
     if (settings::led_pwm() != shown_pwm_) {
         render_leds();
     }
-    if (amp_on_ && !audio::is_playing() && now_ms - last_sound_ms_ >= kAmpIdleMs) {
-        stop_sound();
-    }
     return true;
 }
 
+// Only brightness has an edit mode.
 void Screen::adjust(int32_t steps, uint32_t now_ms) {
     settings::Values& v = settings::values();
-    if (selected_ == 0) {
-        // Brightness runs AUTO, 1, 2 ... 10. Leaving AUTO starts from the level it was showing,
-        // so the brightness doesn't jump.
-        int32_t level = v.auto_brightness ? 0 : v.brightness;
-        if (v.auto_brightness && steps > 0) {
-            level = settings::nearest_level() + (steps - 1);
-        } else {
-            level += steps;
-        }
-        level = level < 0 ? 0 : (level > settings::kMaxLevel ? settings::kMaxLevel : level);
-        v.auto_brightness = level == 0;
-        if (level != 0) {
-            v.brightness = static_cast<uint8_t>(level);
-        }
-        settings::update(now_ms);  // apply right away
+    // Brightness runs AUTO, 1, 2 ... 10. Leaving AUTO starts from the level it was showing, so
+    // the brightness doesn't jump.
+    int32_t level = v.auto_brightness ? 0 : v.brightness;
+    if (v.auto_brightness && steps > 0) {
+        level = settings::nearest_level() + (steps - 1);
     } else {
-        int32_t level = v.volume + steps;
-        level = level < 0 ? 0 : (level > settings::kMaxLevel ? settings::kMaxLevel : level);
-        if (level == v.volume) {
-            return;
-        }
-        v.volume = static_cast<uint8_t>(level);
-        beep(now_ms);
+        level += steps;
     }
+    level = level < 0 ? 0 : (level > settings::kMaxLevel ? settings::kMaxLevel : level);
+    const int32_t before = v.auto_brightness ? 0 : v.brightness;
+    if (level == before) {
+        return;  // already at the end of the range
+    }
+    v.auto_brightness = level == 0;
+    if (level != 0) {
+        v.brightness = static_cast<uint8_t>(level);
+    }
+    settings::update(now_ms);  // apply right away
+    sound::play(sound::Id::MenuMove, now_ms);
     render_screen();
-}
-
-void Screen::beep(uint32_t now_ms) {
-    const uint16_t gain = settings::volume_gain();
-    if (gain == 0) {
-        return;
-    }
-    if (!amp_on_) {
-        audio::begin();  // ~55 ms: DAC to mid-scale, then the amp, then settle
-        amp_on_ = true;
-    }
-    audio::play_tone(kBeepHz, kBeepMs, gain);
-    last_sound_ms_ = now_ms;
-}
-
-void Screen::stop_sound() {
-    if (amp_on_) {
-        audio::end();
-        amp_on_ = false;
-    }
 }
 
 void Screen::render_screen() {
@@ -134,7 +116,7 @@ void Screen::render_screen() {
         if (i == 0) {
             format_level(value, v.auto_brightness ? 0 : v.brightness, "AUTO");
         } else {
-            format_level(value, v.volume, "OFF");
+            std::strcpy(value, v.sound_effects ? "ON" : "OFF");
         }
         const bool editing_this = editing_ && i == selected_;
         if (editing_this) {
@@ -146,7 +128,7 @@ void Screen::render_screen() {
         const auto value_w = static_cast<uint8_t>(std::strlen(value) * lcd::kCharWidth);
         const auto value_x = static_cast<uint8_t>(kValueEndX - value_w);
 
-        screen_.text(kLabelX, i, i == 0 ? "BRIGHTNESS" : "VOLUME");
+        screen_.text(kLabelX, i, i == 0 ? "BRIGHTNESS" : "SOUND EFFECTS");
         screen_.text(value_x, i, value);
         if (editing_this) {
             // Highlight just the value being changed.
@@ -157,7 +139,10 @@ void Screen::render_screen() {
         }
     }
 
-    centered(screen_, 3, editing_ ? "TURN=ADJUST CLICK=OK" : "CLICK=EDIT HOLD=BACK");
+    const char* hint = editing_ ? "TURN=ADJUST CLICK=OK"
+                       : selected_ == 1 ? "CLICK=ON/OFF"
+                                        : "CLICK=EDIT HOLD=BACK";
+    centered(screen_, 3, hint);
     screen_.show();
 }
 

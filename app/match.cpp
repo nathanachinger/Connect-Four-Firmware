@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "settings.hpp"
+#include "sound.hpp"
 
 namespace match {
 namespace {
@@ -97,6 +98,7 @@ void Game::start_drop(uint8_t col, uint32_t now_ms) {
     next_step_ms_ = now_ms + kDropStepMs;
     state_ = State::Drop;
     leds_dirty_ = true;
+    sound::play(sound::Id::Drop, now_ms);
     // A winning move keeps the current turn on screen until the piece lands.
     screen_dirty_ = !board_.over();
 }
@@ -135,14 +137,17 @@ void Game::aim(const input::Events& in, uint32_t now_ms) {
         if (c != aim_col_) {
             aim_col_ = static_cast<uint8_t>(c);
             show_cursor(now_ms);
+            sound::play(sound::Id::Aim, now_ms);
         }
     }
 
     if (in.gesture == input::Gesture::Click) {
         if (board_.can_play(aim_col_)) {
             start_drop(aim_col_, now_ms);
+        } else {
+            sound::play(sound::Id::Blocked, now_ms);  // full column
         }
-        return;  // a full column does nothing
+        return;
     }
 
     if (due(now_ms, next_step_ms_)) {
@@ -168,6 +173,7 @@ bool Game::on_search_progress(void* ctx) {
         return false;
     }
     const uint32_t now = self->platform_.now_ms();
+    sound::update(now);  // the main loop is blocked while the bot searches
     if (due(now, self->next_scan_ms_)) {
         self->next_scan_ms_ = now + kScanStepMs;
         self->step_scan();
@@ -207,6 +213,7 @@ void Game::bot_aim(uint32_t now_ms) {
         bot_col_ = static_cast<uint8_t>(bot_col_ < bot_target_ ? bot_col_ + 1 : bot_col_ - 1);
         next_step_ms_ = now_ms + (bot_col_ == bot_target_ ? kPauseMs : kSlideStepMs);
         leds_dirty_ = true;
+        sound::play(sound::Id::Aim, now_ms);
         return;
     }
     start_drop(bot_target_, now_ms);
@@ -226,7 +233,9 @@ void Game::drop(uint32_t now_ms) {
             blink_on_ = true;
             next_step_ms_ = now_ms + kBlinkMs;
             screen_dirty_ = true;
+            sound::play(result_sound(), now_ms);  // starts with its own landing thud
         } else {
+            sound::play(sound::Id::Land, now_ms);
             begin_turn(now_ms);
         }
     }
@@ -234,6 +243,7 @@ void Game::drop(uint32_t now_ms) {
 
 void Game::over(const input::Events& in, uint32_t now_ms) {
     if (in.gesture == input::Gesture::Click) {
+        sound::play(sound::Id::MenuSelect, now_ms);
         new_game(game::other(first_), now_ms);
         return;
     }
@@ -242,6 +252,18 @@ void Game::over(const input::Events& in, uint32_t now_ms) {
         blink_on_ = !blink_on_;
         leds_dirty_ = true;
     }
+}
+
+sound::Id Game::result_sound() const {
+    const Result result = board_.result();
+    if (result == Result::Draw) {
+        return sound::Id::Draw;
+    }
+    if (!setup_.vs_bot) {
+        return sound::Id::Win;  // someone won; celebrate either color
+    }
+    const Result bot_wins = kBotPlayer == Player::Yellow ? Result::YellowWins : Result::RedWins;
+    return result == bot_wins ? sound::Id::Lose : sound::Id::Win;
 }
 
 void Game::render_leds() {

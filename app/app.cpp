@@ -13,6 +13,7 @@
 #include "power.hpp"
 #include "settings.hpp"
 #include "settings_screen.hpp"
+#include "sound.hpp"
 
 namespace {
 
@@ -88,6 +89,7 @@ bool is_activity(const input::Events& in) {
 // Says why it went dark, then turns everything off until the next power cycle.
 [[noreturn]] void auto_off(led::Matrix& matrix, lcd::Display& screen) {
     save_settings();  // in case it timed out on the settings screen
+    sound::stop();
     matrix.clear();
     matrix.show();
     screen.clear();
@@ -189,7 +191,7 @@ extern "C" void app_main(void) {
         }
         switch (mode) {
             case Mode::MainMenu:
-                switch (main_menu.update(in)) {
+                switch (main_menu.update(in, now)) {
                     case menu::Choice::OnePlayer:
                         level_menu.start();
                         mode = Mode::LevelMenu;
@@ -208,8 +210,9 @@ extern "C" void app_main(void) {
                 break;
 
             case Mode::LevelMenu: {
-                const menu::Choice choice = level_menu.update(in);
+                const menu::Choice choice = level_menu.update(in, now);
                 if (choice == menu::Choice::Back) {
+                    sound::play(sound::Id::MenuBack, now);
                     main_menu.start();
                     mode = Mode::MainMenu;
                 } else if (choice != menu::Choice::None) {
@@ -224,6 +227,7 @@ extern "C" void app_main(void) {
 
             case Mode::Match:
                 if (!game.update(in, now)) {
+                    sound::play(sound::Id::MenuBack, now);
                     main_menu.start();
                     mode = Mode::MainMenu;
                 }
@@ -231,6 +235,7 @@ extern "C" void app_main(void) {
 
             case Mode::Settings:
                 if (!settings_page.update(in, now)) {
+                    sound::play(sound::Id::MenuBack, now);
                     save_settings();
                     main_menu.start();
                     mode = Mode::MainMenu;
@@ -238,6 +243,7 @@ extern "C" void app_main(void) {
                 break;
         }
         settings::update(now);
+        sound::update(HAL_GetTick());
         HAL_Delay(kLoopMs);
     }
 }

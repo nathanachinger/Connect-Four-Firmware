@@ -7,6 +7,7 @@
 #include "display.hpp"
 #include "input.hpp"
 #include "led_matrix.hpp"
+#include "sound.hpp"
 
 namespace match {
 
@@ -62,6 +63,7 @@ private:
     void step_scan();
     static bool on_search_progress(void* ctx);
 
+    sound::Id result_sound() const;
     void render_leds();
     void render_screen();
 

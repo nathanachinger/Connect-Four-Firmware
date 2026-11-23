@@ -86,4 +86,5 @@ Development is tracked as milestones in [docs/ROADMAP.md](docs/ROADMAP.md).
 - [ ] **M3–M6**: hardware bring-up (LED matrix, encoder, display)
 - [x] **M7**: first playable version (two-player): menu, pass-and-play, hold to return to menu
 - [x] **M8**: one-player mode against the bot
-- [ ] **M9–M12**: audio, backlight, battery handling, polish
+- [x] **M9**: sound effects for menus, turning, clicking and game results
+- [ ] **M10–M12**: backlight, battery handling, polish

@@ -11,7 +11,7 @@ inline constexpr uint8_t kMaxLevel = 10;
 struct Values {
     bool auto_brightness = true;  // follow the room light (photoresistor)
     uint8_t brightness = 7;       // manual level, 1..kMaxLevel
-    uint8_t volume = 5;           // 0 (off)..kMaxLevel
+    bool sound_effects = true;
 };
 
 Values& values();
@@ -31,14 +31,13 @@ void update(uint32_t now_ms);
 uint8_t nearest_level();
 // Current LED board brightness (IS31FL3731 PWM, 1..255) for renderers.
 uint8_t led_pwm();
-// Current speaker gain for audio::play_* (0..128; 0 when the volume is off).
-uint16_t volume_gain();
+// Speaker gain for audio::play_*: a fixed level with sound effects on, 0 with them off.
+uint16_t sound_gain();
 
 // Pure mappings, exposed for testing.
 // Brightness percent (10..100) -> LED PWM, squared so steps look even to the eye.
 uint8_t led_pwm_for_percent(uint8_t percent);
 // Ambient light reading (0..4095, brighter = higher) -> brightness percent (10..100).
 uint8_t auto_percent_for_light(uint16_t raw);
-uint16_t gain_for_volume(uint8_t level);
 
 }  // namespace settings

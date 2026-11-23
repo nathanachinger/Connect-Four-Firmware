@@ -23,7 +23,9 @@ constexpr int32_t kDarkenShift = 5;    // average over 2^5 samples: ~1.6 s
 constexpr int32_t kDeadband = 6;       // percent points
 constexpr uint8_t kMinPercent = 10;     // keep the screen readable in the dark
 constexpr uint8_t kMinLedPwm = 4;       // dimmest LED level that's still clearly lit
-constexpr uint16_t kMaxGain = 128;      // half the DAC swing: loud, without clipping the amp
+// Sound effects on: full DAC swing. The amp (gain 1.6) then gives about 5.4 Vpp into the 0.5 W
+// speaker, which is what the schematic designs for.
+constexpr uint16_t kSoundGain = 256;
 
 // Bump when the saved layout changes; older records are then ignored (defaults are used).
 constexpr uint8_t kRecordVersion = 1;
@@ -50,8 +52,9 @@ void load() {
     Values v;
     v.auto_brightness = (p[0] & 1) != 0;
     v.brightness = p[1];
-    v.volume = p[2];
-    if (v.brightness >= 1 && v.brightness <= kMaxLevel && v.volume <= kMaxLevel) {
+    // Byte 2 was a 0-10 volume before sound became on/off; 0 still means off, anything else on.
+    v.sound_effects = p[2] != 0;
+    if (v.brightness >= 1 && v.brightness <= kMaxLevel) {
         g_values = v;
     }
 }
@@ -59,7 +62,7 @@ void load() {
 bool save() {
     const uint8_t p[flash_store::kPayloadBytes] = {
         static_cast<uint8_t>(g_values.auto_brightness ? 1 : 0), g_values.brightness,
-        g_values.volume, 0, 0};
+        static_cast<uint8_t>(g_values.sound_effects ? 1 : 0), 0, 0};
     return flash_store::save(flash_store::internal(), kRecordVersion, p);
 }
 
@@ -71,14 +74,6 @@ uint8_t led_pwm_for_percent(uint8_t percent) {
 uint8_t auto_percent_for_light(uint16_t raw) {
     // Brighter room -> brighter screen and LEDs, with a floor so they stay visible in the dark.
     return static_cast<uint8_t>(kMinPercent + raw * (100u - kMinPercent) / 4095u);
-}
-
-uint16_t gain_for_volume(uint8_t level) {
-    if (level > kMaxLevel) {
-        level = kMaxLevel;
-    }
-    // Squared, like brightness: loudness is perceived roughly logarithmically.
-    return static_cast<uint16_t>(kMaxGain * level * level / (kMaxLevel * kMaxLevel));
 }
 
 void init() {
@@ -149,6 +144,6 @@ uint8_t nearest_level() {
 
 uint8_t led_pwm() { return led_pwm_for_percent(g_percent != 0 ? g_percent : g_auto_percent); }
 
-uint16_t volume_gain() { return gain_for_volume(g_values.volume); }
+uint16_t sound_gain() { return g_values.sound_effects ? kSoundGain : 0; }
 
 }  // namespace settings

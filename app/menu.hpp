@@ -28,8 +28,9 @@ public:
 
     // Draws the menu. Call when entering it.
     void start();
-    // Returns the clicked item's choice, Choice::Back on hold, or Choice::None.
-    Choice update(const input::Events& in);
+    // Returns the clicked item's choice, Choice::Back on hold, or Choice::None. Plays the move,
+    // select and blocked sounds; the caller plays the back sound if it acts on Choice::Back.
+    Choice update(const input::Events& in, uint32_t now_ms);
 
 private:
     void render_screen();
