@@ -19,6 +19,9 @@ constexpr uint32_t kBlinkMs = 300;    // winning-line highlight
 constexpr uint32_t kCursorOnMs = 500;
 constexpr uint32_t kCursorOffMs = 250;
 
+// Debug: depth of the quick search that scores 2-player positions (a few ms on the target).
+constexpr uint8_t kEvalDepth = 5;
+
 // Bot pacing, so its moves are easy to follow even when the search is instant.
 constexpr uint32_t kScanStepMs = 110;   // "thinking" piece sweeping the top row
 constexpr uint32_t kMinThinkMs = 700;   // shortest visible think
@@ -339,16 +342,31 @@ void Game::render_leds() {
 }
 
 // Debug view for lines 2-3, in place of the hints.
-//   1 player: the bot's last search: depth, positions searched, time, and its score from its own
-//             point of view (a forced result shows as WIN/LOSS IN n PLY, n counting half-moves
-//             from the position it searched, its own move included).
-//   2 player: the move count, then the usual hint.
+//   1 player: the bot's last search ("D9 N63186 900MS": depth, positions searched, time), then
+//             who it thinks is ahead and by how much (a forced result shows as BOT WINS / YOU WIN
+//             IN n PLY, n counting half-moves from the position it searched, its own move
+//             included).
+//   2 player: the move number, then who is ahead by a quick search of the position, from Red's
+//             side (a forced result shows as RED/YELLOW WINS IN n PLY, counted from now).
 void Game::render_debug() {
     char line[24];
     if (!setup_.vs_bot) {
         put(put(line, "MOVE "), static_cast<uint32_t>(board_.moves() + 1));
         centered(screen_, 2, line);
-        centered(screen_, 3, "TURN=AIM  CLICK=DROP");
+
+        // Search scores for the side to move; flip it so positive always means Red.
+        const int32_t s = bot::search(board_, kEvalDepth);
+        const int32_t red = board_.to_move() == Player::Red ? s : -s;
+        const char* leader = red > 0 ? "RED" : "YELLOW";
+        const auto magnitude = static_cast<uint32_t>(red >= 0 ? red : -red);
+        if (magnitude >= static_cast<uint32_t>(bot::kWinThreshold)) {
+            put(put(put(put(line, leader), " WINS IN "), bot::kWinScore - magnitude), " PLY");
+        } else if (magnitude == 0) {
+            put(line, "EVEN");
+        } else {
+            put(put(put(line, leader), " AHEAD BY "), magnitude);
+        }
+        centered(screen_, 3, line);
         return;
     }
     if (!have_bot_stats_) {
@@ -362,18 +380,21 @@ void Game::render_debug() {
         centered(screen_, 3, line);
         return;
     }
-    char* p = put(put(line, "DEPTH "), st.depth);
-    put_count(put(p, " NODES "), st.nodes);
+    // Line 2: D<depth> N<nodes> <time>, e.g. "D9 N63186 900MS".
+    char* p = put_count(put(put(put(line, "D"), st.depth), " N"), st.nodes);
+    put(put(put(p, " "), st.ms), "MS");
     centered(screen_, 2, line);
 
-    p = put(put(line, st.ms), "MS ");
-    if (st.score >= bot::kWinThreshold || st.score <= -bot::kWinThreshold) {
-        const int32_t magnitude = st.score > 0 ? st.score : -st.score;
-        p = put(p, st.score > 0 ? "WIN IN " : "LOSS IN ");
-        put(put(p, static_cast<uint32_t>(bot::kWinScore - magnitude)), " PLY");
+    // Line 3: who is ahead. The bot scores from its own side, so positive means the bot.
+    const bool bot_ahead = st.score > 0;
+    const auto magnitude = static_cast<uint32_t>(st.score >= 0 ? st.score : -st.score);
+    if (magnitude >= static_cast<uint32_t>(bot::kWinThreshold)) {
+        p = put(line, bot_ahead ? "BOT WINS IN " : "YOU WIN IN ");
+        put(put(p, bot::kWinScore - magnitude), " PLY");
+    } else if (magnitude == 0) {
+        put(line, "EVEN");
     } else {
-        p = put(p, st.score >= 0 ? "SCORE +" : "SCORE -");
-        put(p, static_cast<uint32_t>(st.score >= 0 ? st.score : -st.score));
+        put(put(line, bot_ahead ? "BOT AHEAD BY " : "YOU'RE AHEAD BY "), magnitude);
     }
     centered(screen_, 3, line);
 }
