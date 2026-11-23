@@ -1,0 +1,98 @@
+#include "menu.hpp"
+
+#include <cstring>
+
+#include "board.hpp"
+
+namespace menu {
+namespace {
+
+struct Item {
+    const char* label;
+    Choice choice;
+    bool enabled;  // disabled items show but can't be chosen
+};
+
+constexpr Item kItems[] = {
+    {"1 PLAYER  (SOON)", Choice::OnePlayer, false},
+    {"2 PLAYER", Choice::TwoPlayer, true},
+    {"SETTINGS  (SOON)", Choice::Settings, false},
+};
+constexpr uint8_t kItemCount = sizeof(kItems) / sizeof(kItems[0]);
+
+constexpr uint8_t kFirstItemLine = 0;
+constexpr uint8_t kVisible = 3;  // lines 0-2; line 3 is the hint
+constexpr uint8_t kLabelX = 2 * lcd::kCharWidth;
+
+constexpr uint8_t kBrightness = 128;
+
+void centered(lcd::Display& screen, uint8_t line, const char* text) {
+    const auto width = static_cast<uint32_t>(std::strlen(text)) * lcd::kCharWidth;
+    const auto x = static_cast<uint8_t>(width < lcd::kWidth ? (lcd::kWidth - width) / 2 : 0);
+    screen.text(x, line, text);
+}
+
+}  // namespace
+
+void Menu::start() {
+    render_screen();
+    render_leds();
+}
+
+Choice Menu::update(const input::Events& in) {
+    if (in.steps != 0) {
+        int32_t s = selected_ + in.steps;
+        s = s < 0 ? 0 : (s >= kItemCount ? kItemCount - 1 : s);
+        if (s != selected_) {
+            selected_ = static_cast<uint8_t>(s);
+            // Scroll just enough to keep the selection visible.
+            if (selected_ < top_) {
+                top_ = selected_;
+            } else if (selected_ >= top_ + kVisible) {
+                top_ = static_cast<uint8_t>(selected_ - kVisible + 1);
+            }
+            render_screen();
+        }
+    }
+
+    if (in.gesture == input::Gesture::Click && kItems[selected_].enabled) {
+        return kItems[selected_].choice;
+    }
+    return Choice::None;
+}
+
+void Menu::render_screen() {
+    screen_.clear();
+    for (uint8_t i = 0; i < kVisible && top_ + i < kItemCount; ++i) {
+        const uint8_t item = top_ + i;
+        const auto line = static_cast<uint8_t>(kFirstItemLine + i);
+        screen_.text(kLabelX, line, kItems[item].label);
+        if (item == selected_) {
+            screen_.invert_line(line);
+        }
+    }
+    centered(screen_, 3, "TURN=SELECT CLICK=OK");
+    screen_.show();
+}
+
+void Menu::render_leds() {
+    // A finished game as decoration: red wins on the "/" diagonal.
+    game::Board board;
+    for (const char* move = "01122323363"; *move != '\0'; ++move) {
+        board.play(static_cast<uint8_t>(*move - '0'));
+    }
+    matrix_.clear();
+    for (uint8_t col = 0; col < game::kCols; ++col) {
+        for (uint8_t row = 0; row < game::kRows; ++row) {
+            const game::Cell cell = board.at(row, col);
+            if (cell != game::Cell::Empty) {
+                matrix_.set(static_cast<uint8_t>(game::kRows - row), col,
+                            cell == game::Cell::Red ? led::Color::Red : led::Color::Yellow,
+                            kBrightness);
+            }
+        }
+    }
+    matrix_.show();
+}
+
+}  // namespace menu

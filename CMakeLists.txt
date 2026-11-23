@@ -61,6 +61,7 @@ set(APP_SOURCES
     app/input.cpp
     app/led_matrix.cpp
     app/light_sensor.cpp
+    app/menu.cpp
     app/two_player.cpp
 )
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${APP_SOURCES})

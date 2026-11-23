@@ -49,15 +49,14 @@ void Game::show_cursor(uint32_t now_ms) {
     leds_dirty_ = true;
 }
 
-void Game::update(const input::Events& in, uint32_t now_ms) {
+bool Game::update(const input::Events& in, uint32_t now_ms) {
     if (in.gesture == input::Gesture::Hold) {
-        new_game(first_, now_ms);
-    } else {
-        switch (state_) {
-            case State::Aim: aim(in, now_ms); break;
-            case State::Drop: drop(now_ms); break;
-            case State::Over: over(in, now_ms); break;
-        }
+        return false;
+    }
+    switch (state_) {
+        case State::Aim: aim(in, now_ms); break;
+        case State::Drop: drop(now_ms); break;
+        case State::Over: over(in, now_ms); break;
     }
 
     if (leds_dirty_) {
@@ -68,6 +67,7 @@ void Game::update(const input::Events& in, uint32_t now_ms) {
         render_screen();
         screen_dirty_ = false;
     }
+    return true;
 }
 
 void Game::aim(const input::Events& in, uint32_t now_ms) {
@@ -181,6 +181,7 @@ void Game::render_screen() {
             std::strcpy(line, name_of(board_.to_move()));
             std::strcat(line, "'S TURN");
             centered(screen_, 1, line);
+            centered(screen_, 2, "HOLD=MENU");
             centered(screen_, 3, "TURN=AIM  CLICK=DROP");
             break;
         case Result::RedWins:
@@ -188,11 +189,13 @@ void Game::render_screen() {
             std::strcpy(line, board_.result() == Result::RedWins ? "RED" : "YELLOW");
             std::strcat(line, " WINS!");
             centered(screen_, 1, line);
-            centered(screen_, 3, "CLICK: PLAY AGAIN");
+            centered(screen_, 2, "HOLD=MENU");
+            centered(screen_, 3, "CLICK=PLAY AGAIN");
             break;
         case Result::Draw:
             centered(screen_, 1, "DRAW!");
-            centered(screen_, 3, "CLICK: PLAY AGAIN");
+            centered(screen_, 2, "HOLD=MENU");
+            centered(screen_, 3, "CLICK=PLAY AGAIN");
             break;
     }
     screen_.show();

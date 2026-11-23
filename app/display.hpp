@@ -34,6 +34,8 @@ public:
     uint8_t text(uint8_t x, uint8_t line, const char* str);
     // Right-aligns a signed number so it ends at column end_x.
     void number(uint8_t end_x, uint8_t line, int32_t value);
+    // Flips every pixel of a text line (8 px tall) from x to x + w, e.g. for a selection bar.
+    void invert_line(uint8_t line, uint8_t x = 0, uint8_t w = kWidth);
 
     bool show();
 

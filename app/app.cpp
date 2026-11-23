@@ -4,6 +4,7 @@
 #include "display.hpp"
 #include "input.hpp"
 #include "led_matrix.hpp"
+#include "menu.hpp"
 #include "peripherals.hpp"
 #include "two_player.hpp"
 
@@ -30,6 +31,7 @@ void wait_for_leds(led::Matrix& matrix, lcd::Display& screen) {
 extern "C" void app_main(void) {
     static lcd::Display screen;
     static led::Matrix matrix;
+    static menu::Menu main_menu(matrix, screen);
     static two_player::Game game(matrix, screen);
 
     backlight::init();
@@ -38,9 +40,27 @@ extern "C" void app_main(void) {
     wait_for_leds(matrix, screen);
     input::init();
 
-    game.start(HAL_GetTick());
+    enum class Mode : uint8_t { Menu, TwoPlayer };
+    Mode mode = Mode::Menu;
+    main_menu.start();
+
     for (;;) {
-        game.update(input::poll(), HAL_GetTick());
+        const input::Events in = input::poll();
+        const uint32_t now = HAL_GetTick();
+        switch (mode) {
+            case Mode::Menu:
+                if (main_menu.update(in) == menu::Choice::TwoPlayer) {
+                    game.start(now);
+                    mode = Mode::TwoPlayer;
+                }
+                break;
+            case Mode::TwoPlayer:
+                if (!game.update(in, now)) {
+                    main_menu.start();
+                    mode = Mode::Menu;
+                }
+                break;
+        }
         HAL_Delay(kLoopMs);
     }
 }

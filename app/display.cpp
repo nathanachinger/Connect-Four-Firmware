@@ -168,6 +168,15 @@ void Display::number(uint8_t end_x, uint8_t line, int32_t value) {
     text(end_x >= width ? static_cast<uint8_t>(end_x - width) : 0, line, p);
 }
 
+void Display::invert_line(uint8_t line, uint8_t x, uint8_t w) {
+    if (line >= kPages) {
+        return;
+    }
+    for (uint16_t i = x; i < kWidth && i < static_cast<uint16_t>(x + w); ++i) {
+        buffer_[line][i] = static_cast<uint8_t>(~buffer_[line][i]);
+    }
+}
+
 bool Display::show() {
     if (!ok_) {
         return false;

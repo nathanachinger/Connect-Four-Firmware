@@ -10,14 +10,15 @@
 namespace two_player {
 
 // Pass-and-play: both players share the knob. Turn to aim along the top LED row, click to drop.
-// After a game, click to play again (the other player starts). Hold restarts at any time.
+// After a game, click to play again (the other player starts). Hold returns to the menu.
 class Game {
 public:
     Game(led::Matrix& matrix, lcd::Display& screen) : matrix_(matrix), screen_(screen) {}
 
     void start(uint32_t now_ms);
-    // Call every loop iteration with fresh input.
-    void update(const input::Events& in, uint32_t now_ms);
+    // Call every loop iteration with fresh input. Returns false when the player holds the
+    // button to leave for the menu.
+    bool update(const input::Events& in, uint32_t now_ms);
 
 private:
     enum class State : uint8_t { Aim, Drop, Over };
