@@ -36,8 +36,10 @@ uint8_t led_pwm();
 uint16_t sound_gain();
 
 // Pure mappings, exposed for testing.
-// Brightness percent (10..100) -> LED PWM, squared so steps look even to the eye.
+// Brightness percent (10..100) -> LED PWM along a curve that is dim through the middle.
 uint8_t led_pwm_for_percent(uint8_t percent);
+// Brightness percent (10..100) -> backlight::set_percent input, a little low through the middle.
+uint8_t backlight_for_percent(uint8_t percent);
 // Ambient light reading (0..4095, brighter = higher) -> brightness percent (10..100).
 uint8_t auto_percent_for_light(uint16_t raw);
 

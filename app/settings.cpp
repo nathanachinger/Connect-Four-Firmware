@@ -22,7 +22,15 @@ constexpr int32_t kBrightenShift = 4;  // average over 2^4 samples: ~0.8 s
 constexpr int32_t kDarkenShift = 5;    // average over 2^5 samples: ~1.6 s
 constexpr int32_t kDeadband = 6;       // percent points
 constexpr uint8_t kMinPercent = 10;     // keep the screen readable in the dark
-constexpr uint8_t kMinLedPwm = 4;       // dimmest LED level that's still clearly lit
+// LED PWM at brightness 10%, 20% ... 100%, interpolated in between. Same ends as a plain
+// squared curve (4 in the dark, full 255 in very bright light) but held low through the middle
+// (about an eighth as bright at 50%), where a squared curve looked too bright for a normally lit
+// room; it only climbs steeply in very bright light.
+constexpr uint8_t kLedCurve[] = {4, 6, 6, 7, 8, 10, 15, 30, 90, 255};
+// Backlight input (backlight::set_percent, which squares it into PWM duty) at brightness 10% ...
+// 100%. Same ends as before (10 in the dark, full 100 in very bright light), a little lower in
+// the middle to sit with the dimmer LEDs: about 30% less backlight in a normally lit room.
+constexpr uint8_t kBacklightCurve[] = {10, 17, 25, 33, 42, 51, 61, 73, 86, 100};
 // Sound effects on: full DAC swing. The amp (gain 1.6) then gives about 5.4 Vpp into the 0.5 W
 // speaker, which is what the schematic designs for.
 constexpr uint16_t kSoundGain = 256;
@@ -68,10 +76,23 @@ bool save() {
     return flash_store::save(flash_store::internal(), kRecordVersion, p);
 }
 
-uint8_t led_pwm_for_percent(uint8_t percent) {
-    const uint32_t pwm = 255u * percent * percent / 10000u;
-    return static_cast<uint8_t>(pwm < kMinLedPwm ? kMinLedPwm : pwm);
+// Linear between the 10 points of a 10%..100% curve.
+static uint8_t along_curve(const uint8_t (&curve)[10], uint8_t percent) {
+    if (percent <= 10) {
+        return curve[0];
+    }
+    if (percent >= 100) {
+        return curve[9];
+    }
+    const uint8_t i = static_cast<uint8_t>(percent / 10 - 1);  // segment start: 10, 20 ... 90
+    const uint32_t lo = curve[i];
+    const uint32_t hi = curve[i + 1];
+    return static_cast<uint8_t>(lo + (hi - lo) * (percent % 10) / 10);
 }
+
+uint8_t led_pwm_for_percent(uint8_t percent) { return along_curve(kLedCurve, percent); }
+
+uint8_t backlight_for_percent(uint8_t percent) { return along_curve(kBacklightCurve, percent); }
 
 uint8_t auto_percent_for_light(uint16_t raw) {
     // Brighter room -> brighter screen and LEDs, with a floor so they stay visible in the dark.
@@ -134,7 +155,7 @@ void update(uint32_t now_ms) {
         g_values.auto_brightness ? g_auto_percent : static_cast<uint8_t>(g_values.brightness * 10);
     if (percent != g_percent) {
         g_percent = percent;
-        backlight::set_percent(percent);
+        backlight::set_percent(backlight_for_percent(percent));
     }
 }
 
