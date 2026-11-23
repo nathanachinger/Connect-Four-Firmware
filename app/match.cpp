@@ -45,6 +45,30 @@ void centered(lcd::Display& screen, uint8_t line, const char* text) {
     screen.text(x, line, text);
 }
 
+// Small formatting helpers for the debug lines. Each writes at p, terminates, returns the end.
+char* put(char* p, const char* s) {
+    while (*s != '\0') {
+        *p++ = *s++;
+    }
+    *p = '\0';
+    return p;
+}
+char* put(char* p, uint32_t v) {
+    char digits[10];
+    uint8_t n = 0;
+    do {
+        digits[n++] = static_cast<char>('0' + v % 10);
+        v /= 10;
+    } while (v != 0);
+    while (n > 0) {
+        *p++ = digits[--n];
+    }
+    *p = '\0';
+    return p;
+}
+// Up to 99999 exactly, then in thousands ("1234K") so it fits.
+char* put_count(char* p, uint32_t v) { return v < 100000 ? put(p, v) : put(put(p, v / 1000), "K"); }
+
 bool due(uint32_t now_ms, uint32_t at_ms) { return static_cast<int32_t>(now_ms - at_ms) >= 0; }
 
 }  // namespace
@@ -53,6 +77,7 @@ void Game::start(const Setup& setup, uint32_t now_ms, uint32_t seed) {
     setup_ = setup;
     rng_.reseed(seed);
     aim_col_ = game::kCols / 2;
+    have_bot_stats_ = false;
     new_game(Player::Red, now_ms);
 }
 
@@ -190,6 +215,7 @@ void Game::think(uint32_t now_ms) {
     hooks.progress = &Game::on_search_progress;
     hooks.ctx = this;
     bot_target_ = bot::choose(board_, setup_.level, rng_, hooks, &bot_stats_);
+    have_bot_stats_ = true;
     if (exit_requested_) {
         return;
     }
@@ -312,6 +338,46 @@ void Game::render_leds() {
     matrix_.show();
 }
 
+// Debug view for lines 2-3, in place of the hints.
+//   1 player: the bot's last search: depth, positions searched, time, and its score from its own
+//             point of view (a forced result shows as WIN/LOSS IN n PLY, n counting half-moves
+//             from the position it searched, its own move included).
+//   2 player: the move count, then the usual hint.
+void Game::render_debug() {
+    char line[24];
+    if (!setup_.vs_bot) {
+        put(put(line, "MOVE "), static_cast<uint32_t>(board_.moves() + 1));
+        centered(screen_, 2, line);
+        centered(screen_, 3, "TURN=AIM  CLICK=DROP");
+        return;
+    }
+    if (!have_bot_stats_) {
+        centered(screen_, 2, "BOT: NO MOVE YET");
+        return;
+    }
+    const bot::Stats& st = bot_stats_;
+    if (setup_.level == bot::Level::Easy) {
+        centered(screen_, 2, "EASY: NO SEARCH");
+        put(put(line, st.ms), "MS");
+        centered(screen_, 3, line);
+        return;
+    }
+    char* p = put(put(line, "DEPTH "), st.depth);
+    put_count(put(p, " NODES "), st.nodes);
+    centered(screen_, 2, line);
+
+    p = put(put(line, st.ms), "MS ");
+    if (st.score >= bot::kWinThreshold || st.score <= -bot::kWinThreshold) {
+        const int32_t magnitude = st.score > 0 ? st.score : -st.score;
+        p = put(p, st.score > 0 ? "WIN IN " : "LOSS IN ");
+        put(put(p, static_cast<uint32_t>(bot::kWinScore - magnitude)), " PLY");
+    } else {
+        p = put(p, st.score >= 0 ? "SCORE +" : "SCORE -");
+        put(p, static_cast<uint32_t>(st.score >= 0 ? st.score : -st.score));
+    }
+    centered(screen_, 3, line);
+}
+
 void Game::render_screen() {
     char line[22];
     screen_.clear();
@@ -333,9 +399,13 @@ void Game::render_screen() {
             std::strcat(line, "'S TURN");
             centered(screen_, 1, line);
         }
-        centered(screen_, 2, "HOLD=MENU");
-        if (!bot_turn()) {
-            centered(screen_, 3, "TURN=AIM  CLICK=DROP");
+        if (settings::values().debug) {
+            render_debug();
+        } else {
+            centered(screen_, 2, "HOLD=MENU");
+            if (!bot_turn()) {
+                centered(screen_, 3, "TURN=AIM  CLICK=DROP");
+            }
         }
     } else {
         if (result == Result::Draw) {

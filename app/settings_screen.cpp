@@ -8,7 +8,8 @@
 namespace settings_screen {
 namespace {
 
-constexpr uint8_t kItemCount = 2;
+constexpr uint8_t kItemCount = 3;
+enum Item : uint8_t { kBrightness, kSoundEffects, kDebug };
 constexpr uint8_t kLabelX = 2 * lcd::kCharWidth;
 constexpr uint8_t kValueEndX = lcd::kWidth - lcd::kCharWidth;  // right edge of the value text
 
@@ -47,15 +48,18 @@ bool Screen::update(const input::Events& in, uint32_t now_ms) {
     }
 
     if (in.gesture == input::Gesture::Click) {
-        if (selected_ == 1) {
-            // On/off needs no edit step: a click switches it.
-            settings::Values& v = settings::values();
+        settings::Values& v = settings::values();
+        // On/off items need no edit step: a click switches them.
+        if (selected_ == kSoundEffects) {
             v.sound_effects = !v.sound_effects;
             if (v.sound_effects) {
                 sound::play(sound::Id::SoundOn, now_ms);
             } else {
                 sound::stop();  // cut anything still playing; silence confirms it's off
             }
+        } else if (selected_ == kDebug) {
+            v.debug = !v.debug;
+            sound::play(sound::Id::MenuSelect, now_ms);
         } else {
             editing_ = !editing_;
             sound::play(sound::Id::MenuSelect, now_ms);
@@ -113,10 +117,20 @@ void Screen::render_screen() {
 
     for (uint8_t i = 0; i < kItemCount; ++i) {
         char value[12];
-        if (i == 0) {
-            format_level(value, v.auto_brightness ? 0 : v.brightness, "AUTO");
-        } else {
-            std::strcpy(value, v.sound_effects ? "ON" : "OFF");
+        const char* label = "";
+        switch (i) {
+            case kBrightness:
+                label = "BRIGHTNESS";
+                format_level(value, v.auto_brightness ? 0 : v.brightness, "AUTO");
+                break;
+            case kSoundEffects:
+                label = "SOUND EFFECTS";
+                std::strcpy(value, v.sound_effects ? "ON" : "OFF");
+                break;
+            default:
+                label = "DEBUG";
+                std::strcpy(value, v.debug ? "ON" : "OFF");
+                break;
         }
         const bool editing_this = editing_ && i == selected_;
         if (editing_this) {
@@ -128,7 +142,7 @@ void Screen::render_screen() {
         const auto value_w = static_cast<uint8_t>(std::strlen(value) * lcd::kCharWidth);
         const auto value_x = static_cast<uint8_t>(kValueEndX - value_w);
 
-        screen_.text(kLabelX, i, i == 0 ? "BRIGHTNESS" : "SOUND EFFECTS");
+        screen_.text(kLabelX, i, label);
         screen_.text(value_x, i, value);
         if (editing_this) {
             // Highlight just the value being changed.
@@ -140,7 +154,7 @@ void Screen::render_screen() {
     }
 
     const char* hint = editing_ ? "TURN=ADJUST CLICK=OK"
-                       : selected_ == 1 ? "CLICK=ON/OFF"
+                       : selected_ != kBrightness ? "CLICK=ON/OFF"
                                         : "CLICK=EDIT HOLD=BACK";
     centered(screen_, 3, hint);
     screen_.show();

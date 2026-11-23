@@ -12,7 +12,7 @@ using game::kColBits;
 using game::kCols;
 using game::kRows;
 
-constexpr int32_t kWin = 1000000;
+constexpr int32_t kWin = kWinScore;
 constexpr int32_t kInfinity = kWin + 1;
 constexpr uint8_t kMaxMoves = kCols * kRows;
 

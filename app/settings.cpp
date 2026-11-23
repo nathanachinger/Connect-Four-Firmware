@@ -54,6 +54,7 @@ void load() {
     v.brightness = p[1];
     // Byte 2 was a 0-10 volume before sound became on/off; 0 still means off, anything else on.
     v.sound_effects = p[2] != 0;
+    v.debug = (p[3] & 1) != 0;  // 0 in records saved before debug existed
     if (v.brightness >= 1 && v.brightness <= kMaxLevel) {
         g_values = v;
     }
@@ -62,7 +63,8 @@ void load() {
 bool save() {
     const uint8_t p[flash_store::kPayloadBytes] = {
         static_cast<uint8_t>(g_values.auto_brightness ? 1 : 0), g_values.brightness,
-        static_cast<uint8_t>(g_values.sound_effects ? 1 : 0), 0, 0};
+        static_cast<uint8_t>(g_values.sound_effects ? 1 : 0),
+        static_cast<uint8_t>(g_values.debug ? 1 : 0), 0};
     return flash_store::save(flash_store::internal(), kRecordVersion, p);
 }
 

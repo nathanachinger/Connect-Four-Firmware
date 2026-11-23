@@ -8,9 +8,9 @@
 
 namespace settings_screen {
 
-// Brightness (AUTO or 1-10) and sound effects (ON or OFF).
-// Turn to pick a setting. Brightness: click to edit, turn to change, click to finish. Sound
-// effects: click switches it. Hold goes back. Changes apply immediately: the bottom LED row lights
+// Brightness (AUTO or 1-10), sound effects (ON/OFF) and debug (ON/OFF: bot stats in games).
+// Turn to pick a setting. Brightness: click to edit, turn to change, click to finish. On/off
+// items: a click switches them. Hold goes back. Changes apply immediately: the bottom LED row lights
 // as a brightness sample, and switching sound on plays a chirp.
 class Screen {
 public:
@@ -28,7 +28,7 @@ private:
 
     led::Matrix& matrix_;
     lcd::Display& screen_;
-    uint8_t selected_ = 0;  // 0 = brightness, 1 = sound effects
+    uint8_t selected_ = 0;  // 0 = brightness, 1 = sound effects, 2 = debug
     bool editing_ = false;
     uint8_t shown_pwm_ = 0;
 };

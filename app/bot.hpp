@@ -48,8 +48,10 @@ struct Stats {
 uint8_t choose(const game::Board& board, Level level, Rng& rng, const Hooks& hooks = {},
                Stats* stats = nullptr);
 
-// Scores at or beyond this mean a forced win (negative: forced loss) within the search horizon.
-inline constexpr int32_t kWinThreshold = 1000000 - 64;
+// A forced result scores kWinScore - plies (a loss: the negative), where plies counts half-moves
+// from now up to and including the winning move. Anything at or beyond kWinThreshold is forced.
+inline constexpr int32_t kWinScore = 1000000;
+inline constexpr int32_t kWinThreshold = kWinScore - 64;
 
 // Depth-limited negamax score for the side to move, exposed for testing.
 int32_t search(const game::Board& board, uint8_t depth);

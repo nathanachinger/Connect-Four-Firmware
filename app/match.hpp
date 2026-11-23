@@ -64,6 +64,7 @@ private:
     static bool on_search_progress(void* ctx);
 
     sound::Id result_sound() const;
+    void render_debug();
     void render_leds();
     void render_screen();
 
@@ -86,6 +87,7 @@ private:
 
     bot::Rng rng_;
     bot::Stats bot_stats_ = {};
+    bool have_bot_stats_ = false;  // a bot move has been searched this session
 
     // Falling piece: column, current and final LED row, and which player dropped it.
     uint8_t drop_col_ = 0;

@@ -12,6 +12,7 @@ struct Values {
     bool auto_brightness = true;  // follow the room light (photoresistor)
     uint8_t brightness = 7;       // manual level, 1..kMaxLevel
     bool sound_effects = true;
+    bool debug = false;           // show bot search stats during games
 };
 
 Values& values();
