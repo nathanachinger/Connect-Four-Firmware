@@ -11,4 +11,10 @@ bool init();
 // Battery voltage in millivolts, averaged over 16 conversions. Returns 0 if the ADC fails.
 uint32_t read_mv();
 
+// Rough charge left (0..100, in steps of 5) for four alkaline AA cells in series, from the pack
+// voltage. Follows a typical alkaline discharge curve at light load, so read it before the LEDs
+// and speaker draw much current. 4.0 V (1.0 V per cell) is 0%: the planned cutoff.
+// NiMH cells sit at 1.2-1.3 V for most of their charge, so they would read low (25-55% when full).
+uint8_t percent_from_mv(uint32_t pack_mv);
+
 }  // namespace battery

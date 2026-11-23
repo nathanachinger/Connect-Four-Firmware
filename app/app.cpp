@@ -1,6 +1,8 @@
 #include "app_main.h"
 
+#include "adc.hpp"
 #include "backlight.hpp"
+#include "battery.hpp"
 #include "display.hpp"
 #include "input.hpp"
 #include "led_matrix.hpp"
@@ -13,6 +15,8 @@ namespace {
 
 constexpr uint8_t kBacklightPercent = 80;
 constexpr uint32_t kLoopMs = 2;  // input poll rate; well under the 20 ms debounce
+constexpr uint32_t kStartupMs = 1500;  // startup screen; a click skips it
+constexpr uint8_t kLowBatteryPercent = 10;
 
 constexpr menu::Item kMainItems[] = {
     {"1 PLAYER", menu::Choice::OnePlayer, true},
@@ -52,6 +56,71 @@ uint32_t random_seed() {
 
 input::Events poll_input() { return input::poll(); }
 
+void centered(lcd::Display& screen, uint8_t line, const char* text) {
+    uint8_t len = 0;
+    while (text[len] != '\0') {
+        ++len;
+    }
+    const auto width = static_cast<uint32_t>(len) * lcd::kCharWidth;
+    screen.text(static_cast<uint8_t>(width < lcd::kWidth ? (lcd::kWidth - width) / 2 : 0), line,
+                text);
+}
+
+// Title and battery estimate. Read before the LEDs light, while the pack is lightly loaded.
+void show_startup(lcd::Display& screen) {
+    screen.clear();
+    centered(screen, 0, "CONNECT FOUR");
+
+    uint32_t mv = 0;
+    if (battery::init()) {
+        adc::measure_vdda_mv();
+        mv = battery::read_mv();
+    }
+    if (mv == 0) {
+        centered(screen, 2, "BATTERY --");
+    } else {
+        const uint8_t pct = battery::percent_from_mv(mv);
+
+        // Battery outline with a fill bar, then "85%" to its right; the pair is centered.
+        constexpr uint8_t kBodyW = 26;
+        constexpr uint8_t kBodyH = 10;
+        constexpr uint8_t kNubW = 2;
+        constexpr uint8_t kGap = 6;
+        char text[5];
+        uint8_t n = 0;
+        if (pct >= 100) {
+            text[n++] = '1';
+        }
+        if (pct >= 10) {
+            text[n++] = static_cast<char>('0' + pct / 10 % 10);
+        }
+        text[n++] = static_cast<char>('0' + pct % 10);
+        text[n++] = '%';
+        text[n] = '\0';
+        const auto total = static_cast<uint8_t>(kBodyW + kNubW + kGap + n * lcd::kCharWidth);
+        const auto x = static_cast<uint8_t>((lcd::kWidth - total) / 2);
+        constexpr uint8_t y = 14;  // rows 14-23: level with line 2, clear of line 3
+        screen.draw_rect(x, y, kBodyW, kBodyH);
+        screen.fill_rect(static_cast<uint8_t>(x + kBodyW), y + 3, kNubW, kBodyH - 6, true);
+        const auto fill = static_cast<uint8_t>((kBodyW - 4) * pct / 100);
+        screen.fill_rect(static_cast<uint8_t>(x + 2), y + 2, fill, kBodyH - 4, true);
+        screen.text(static_cast<uint8_t>(x + kBodyW + kNubW + kGap), 2, text);
+
+        if (pct <= kLowBatteryPercent) {
+            centered(screen, 3, "LOW BATTERY");
+        }
+    }
+    screen.show();
+
+    const uint32_t start = HAL_GetTick();
+    while (HAL_GetTick() - start < kStartupMs) {
+        if (input::poll().gesture == input::Gesture::Click) {
+            break;
+        }
+        HAL_Delay(kLoopMs);
+    }
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -64,9 +133,10 @@ extern "C" void app_main(void) {
     backlight::init();
     backlight::set_percent(kBacklightPercent);
     screen.init();
-    wait_for_leds(matrix, screen);
     input::init();
     light::init();
+    show_startup(screen);
+    wait_for_leds(matrix, screen);
 
     enum class Mode : uint8_t { MainMenu, LevelMenu, Match };
     Mode mode = Mode::MainMenu;
