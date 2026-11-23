@@ -94,6 +94,7 @@ private:
     uint32_t next_step_ms_ = 0;  // next cursor blink, slide step, drop step or highlight blink
     bool blink_on_ = false;      // cursor visible (Aim) or winning line visible (Over)
 
+    uint8_t shown_pwm_ = 0;  // LED brightness of the last render
     bool leds_dirty_ = true;
     bool screen_dirty_ = true;
 };

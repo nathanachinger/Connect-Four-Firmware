@@ -64,6 +64,8 @@ set(APP_SOURCES
     app/light_sensor.cpp
     app/match.cpp
     app/menu.cpp
+    app/settings.cpp
+    app/settings_screen.cpp
 )
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${APP_SOURCES})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

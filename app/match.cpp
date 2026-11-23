@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "settings.hpp"
+
 namespace match {
 namespace {
 
@@ -9,7 +11,6 @@ using game::Player;
 using game::Result;
 using led::Color;
 
-constexpr uint8_t kBrightness = 128;
 constexpr uint32_t kDropStepMs = 45;  // per LED row while a piece falls
 constexpr uint32_t kBlinkMs = 300;    // winning-line highlight
 // Aiming piece blinks so it stands out from the board, but turns solid (and restarts the blink)
@@ -115,7 +116,8 @@ bool Game::update(const input::Events& in, uint32_t now_ms) {
         return false;
     }
 
-    if (leds_dirty_) {
+    // Brightness can change by itself in auto mode.
+    if (leds_dirty_ || settings::led_pwm() != shown_pwm_) {
         render_leds();
         leds_dirty_ = false;
     }
@@ -244,6 +246,8 @@ void Game::over(const input::Events& in, uint32_t now_ms) {
 
 void Game::render_leds() {
     matrix_.clear();
+    shown_pwm_ = settings::led_pwm();
+    const uint8_t pwm = shown_pwm_;
 
     const bool dropping = state_ == State::Drop;
     // Winning pieces blink on and off in their own color. (Red + yellow together was meant to
@@ -263,22 +267,22 @@ void Game::render_leds() {
             if (hidden & game::bit(row, col)) {
                 continue;
             }
-            matrix_.set(r, col, cell == game::Cell::Red ? Color::Red : Color::Yellow, kBrightness);
+            matrix_.set(r, col, cell == game::Cell::Red ? Color::Red : Color::Yellow, pwm);
         }
     }
 
     switch (state_) {
         case State::Drop:
-            matrix_.set(drop_led_row_, drop_col_, color_of(drop_player_), kBrightness);
+            matrix_.set(drop_led_row_, drop_col_, color_of(drop_player_), pwm);
             break;
         case State::Aim:
             if (blink_on_) {
-                matrix_.set(0, aim_col_, color_of(board_.to_move()), kBrightness);
+                matrix_.set(0, aim_col_, color_of(board_.to_move()), pwm);
             }
             break;
         case State::Think:
         case State::BotAim:
-            matrix_.set(0, bot_col_, color_of(kBotPlayer), kBrightness);
+            matrix_.set(0, bot_col_, color_of(kBotPlayer), pwm);
             break;
         case State::Over:
             break;

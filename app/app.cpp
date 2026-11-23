@@ -10,10 +10,11 @@
 #include "match.hpp"
 #include "menu.hpp"
 #include "peripherals.hpp"
+#include "settings.hpp"
+#include "settings_screen.hpp"
 
 namespace {
 
-constexpr uint8_t kBacklightPercent = 80;
 constexpr uint32_t kLoopMs = 2;  // input poll rate; well under the 20 ms debounce
 constexpr uint32_t kStartupMs = 1500;  // startup screen; a click skips it
 constexpr uint8_t kLowBatteryPercent = 10;
@@ -21,7 +22,7 @@ constexpr uint8_t kLowBatteryPercent = 10;
 constexpr menu::Item kMainItems[] = {
     {"1 PLAYER", menu::Choice::OnePlayer, true},
     {"2 PLAYER", menu::Choice::TwoPlayer, true},
-    {"SETTINGS  (SOON)", menu::Choice::Settings, false},
+    {"SETTINGS", menu::Choice::Settings, true},
 };
 
 constexpr menu::Item kLevelItems[] = {
@@ -129,16 +130,18 @@ extern "C" void app_main(void) {
     static menu::Menu main_menu(matrix, screen, kMainItems, 3, 1, "TURN=SELECT CLICK=OK");
     static menu::Menu level_menu(matrix, screen, kLevelItems, 3, 1, "CLICK=OK  HOLD=BACK");
     static match::Game game(matrix, screen, match::Platform{HAL_GetTick, poll_input});
+    static settings_screen::Screen settings_page(matrix, screen);
 
     backlight::init();
-    backlight::set_percent(kBacklightPercent);
+    light::init();
+    settings::init();
+    settings::update(HAL_GetTick());  // backlight on at the room-matched level
     screen.init();
     input::init();
-    light::init();
     show_startup(screen);
     wait_for_leds(matrix, screen);
 
-    enum class Mode : uint8_t { MainMenu, LevelMenu, Match };
+    enum class Mode : uint8_t { MainMenu, LevelMenu, Match, Settings };
     Mode mode = Mode::MainMenu;
     main_menu.start();
 
@@ -155,6 +158,10 @@ extern "C" void app_main(void) {
                     case menu::Choice::TwoPlayer:
                         game.start({false, bot::Level::Easy}, now, 0);
                         mode = Mode::Match;
+                        break;
+                    case menu::Choice::Settings:
+                        settings_page.start();
+                        mode = Mode::Settings;
                         break;
                     default:
                         break;
@@ -182,7 +189,15 @@ extern "C" void app_main(void) {
                     mode = Mode::MainMenu;
                 }
                 break;
+
+            case Mode::Settings:
+                if (!settings_page.update(in, now)) {
+                    main_menu.start();
+                    mode = Mode::MainMenu;
+                }
+                break;
         }
+        settings::update(now);
         HAL_Delay(kLoopMs);
     }
 }
