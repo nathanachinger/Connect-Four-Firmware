@@ -2,16 +2,12 @@
 
 #include <cstring>
 
-#include "board.hpp"
-
 namespace menu {
 namespace {
 
 constexpr uint8_t kFirstItemLine = 0;
 constexpr uint8_t kVisible = 3;  // lines 0-2; line 3 is the hint
 constexpr uint8_t kLabelX = 2 * lcd::kCharWidth;
-
-constexpr uint8_t kBrightness = 128;
 
 void centered(lcd::Display& screen, uint8_t line, const char* text) {
     const auto width = static_cast<uint32_t>(std::strlen(text)) * lcd::kCharWidth;
@@ -66,22 +62,8 @@ void Menu::render_screen() {
 }
 
 void Menu::render_leds() {
-    // A finished game as decoration: red wins on the "/" diagonal.
-    game::Board board;
-    for (const char* move = "01122323363"; *move != '\0'; ++move) {
-        board.play(static_cast<uint8_t>(*move - '0'));
-    }
+    // The board stays dark in menus.
     matrix_.clear();
-    for (uint8_t col = 0; col < game::kCols; ++col) {
-        for (uint8_t row = 0; row < game::kRows; ++row) {
-            const game::Cell cell = board.at(row, col);
-            if (cell != game::Cell::Empty) {
-                matrix_.set(static_cast<uint8_t>(game::kRows - row), col,
-                            cell == game::Cell::Red ? led::Color::Red : led::Color::Yellow,
-                            kBrightness);
-            }
-        }
-    }
     matrix_.show();
 }
 
