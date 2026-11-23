@@ -11,10 +11,10 @@ inline constexpr uint8_t kCols = 7;
 
 // IS31FL3731 driving the red and yellow 7x7 grids over I2C1.
 //
-// Mapping (from the schematic, which uses the datasheet's Cx-y names):
-//   row r, col c, red    -> LED C(r+1)-(c+1)   (matrix A, CA lines)
-//   row r, col c, yellow -> LED C(r+1)-(c+9)   (matrix B, CB lines)
-// Row 0 is the C1-x row. Which physical edge that is gets confirmed by the row sweep test.
+// row/col are physical, as seen on the board: row 0 = top, col 0 = left.
+// The grid is transposed relative to the schematic's Cx-y names (confirmed on hardware):
+//   row r, col c, red    -> LED C(c+1)-(r+1)   (matrix A, CA lines)
+//   row r, col c, yellow -> LED C(c+1)-(r+9)   (matrix B, CB lines)
 class Matrix {
 public:
     // Probes the chip, configures picture mode on frame 0 and enables the 98 fitted LEDs.

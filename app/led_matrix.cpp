@@ -25,8 +25,10 @@ constexpr uint8_t kRegPwm = 0x24;         // 144 bytes, one per LED
 
 constexpr uint8_t kRegisterBytes = 18;
 
+// The grid is transposed on the PCB: the chip's Cx rows run left-to-right across the board and its
+// y columns run top-to-bottom. So the physical column picks the chip row and vice versa.
 constexpr uint8_t pwm_index(uint8_t row, uint8_t col, Color color) {
-    return static_cast<uint8_t>(row * 16 + col + (color == Color::Yellow ? 8 : 0));
+    return static_cast<uint8_t>(col * 16 + row + (color == Color::Yellow ? 8 : 0));
 }
 
 }  // namespace

@@ -152,7 +152,7 @@ void led_matrix(led::Matrix& matrix) {
     matrix.fill(Color::Red, kBrightness);
     show_for(matrix, 1000);
 
-    // Row sweep starting at row 0 (C1-x), then column sweep starting at column 0.
+    // Row sweep from the top row down, then column sweep from the left column across.
     for (uint8_t row = 0; row < kRows; ++row) {
         matrix.clear();
         for (uint8_t col = 0; col < kCols; ++col) {
