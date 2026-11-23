@@ -69,7 +69,8 @@ cmake --preset Debug && cmake --build --preset Debug
   Difficulty: easy (random but takes/blocks wins), medium (depth ~4), hard (time-budgeted).
   RNG seeded from ADC noise.
 - **LED renderer**: `(row, col, color) → driver index` table, transcribed from the schematic;
-  LED-walk test mode to verify. Use IS31 frames for tear-free double buffering. Red+yellow = orange highlight.
+  LED-walk test mode to verify. Use IS31 frames for tear-free double buffering. Win highlight blinks the winning pieces;
+  red+yellow "orange" reads as red on this hardware, so don't rely on it.
 - **Backlight**: EMA-filtered ambient → perceptual LUT → slew-limited, hysteretic duty. Reuse ambient
   level to scale LED matrix PWM.
 - **Battery**: VREFINT-compensated, averaged over seconds (speaker sag), warn ≈ 4.4 V, cutoff ≈ 4.0 V,
@@ -86,7 +87,7 @@ User code in `USER CODE` blocks survives regeneration.
 - [x] **PA5 ENCODER_SEL** → `GPIO_Input`, no pull (R1 is the pull-up).
 - [x] **Clock** → SYSCLK from PLLR = 64 MHz.
 - [x] **TIM1 CH1 (PA8)** → PWM Generation CH1 for backlight. At 64 MHz: PSC = 0, ARR = 3199 → 20 kHz.
-- [ ] **TIM6** → used as DAC trigger: Trigger Event Selection = Update Event (period set in code later).
-- [ ] **DAC1 OUT1** → Trigger = Timer 6 Trigger Out event; add DMA request DAC1_CH1, circular, half-word.
+- [x] **TIM6** → used as DAC trigger: Trigger Event Selection = Update Event (period set in code later).
+- [x] **DAC1 OUT1** → Trigger = Timer 6 Trigger Out event; add DMA request DAC1_CH1, circular, half-word.
 - [ ] **ADC1** → scan IN0, IN8, VREFINT; consider DMA or polled sequence; long sample time (high-Z sources).
 - [x] Confirm **I2C1** timing is 400 kHz Fast Mode for the new clock.

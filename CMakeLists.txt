@@ -55,11 +55,13 @@ set(APP_SOURCES
     app/audio.cpp
     app/backlight.cpp
     app/battery.cpp
+    app/board.cpp
     app/display.cpp
     app/encoder.cpp
-    app/hw_test.cpp
+    app/input.cpp
     app/led_matrix.cpp
     app/light_sensor.cpp
+    app/two_player.cpp
 )
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${APP_SOURCES})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

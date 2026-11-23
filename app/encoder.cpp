@@ -52,6 +52,8 @@ void update_button() {
     }
 }
 
+bool switch_pressed() { return read_switch(); }
+
 bool button_down() { return stable_down; }
 
 uint32_t button_presses() { return presses; }

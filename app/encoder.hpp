@@ -18,6 +18,9 @@ bool init();
 int32_t count();
 inline int32_t detents() { return count() / kCountsPerDetent; }
 
+// Raw (undebounced) switch state: true while pressed.
+bool switch_pressed();
+
 // Call regularly (every few ms). Debounces the switch (20 ms).
 void update_button();
 bool button_down();
