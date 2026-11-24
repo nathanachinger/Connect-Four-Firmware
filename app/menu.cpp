@@ -19,9 +19,11 @@ void centered(lcd::Display& screen, uint8_t line, const char* text) {
 
 }  // namespace
 
-void Menu::start() {
+void Menu::start(bool keep_leds) {
     render_screen();
-    render_leds();
+    if (!keep_leds) {
+        render_leds();
+    }
 }
 
 Choice Menu::update(const input::Events& in, uint32_t now_ms) {
@@ -60,7 +62,13 @@ void Menu::render_screen() {
     for (uint8_t i = 0; i < kVisible && top_ + i < count_; ++i) {
         const uint8_t item = top_ + i;
         const auto line = static_cast<uint8_t>(kFirstItemLine + i);
-        screen_.text(kLabelX, line, items_[item].label);
+        const uint8_t end = screen_.text(kLabelX, line, items_[item].label);
+        if (!items_[item].enabled) {
+            // Struck through: a line across the middle row of the 7 px tall glyphs, reaching 1 px
+            // past the text at each end.
+            screen_.fill_rect(static_cast<uint8_t>(kLabelX - 1), static_cast<uint8_t>(line * 8 + 3),
+                              static_cast<uint8_t>(end - kLabelX + 1), 1, true);
+        }
         if (item == selected_) {
             screen_.invert_line(line);
         }

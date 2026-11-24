@@ -8,12 +8,17 @@
 
 namespace menu {
 
-enum class Choice : uint8_t { None, Back, OnePlayer, TwoPlayer, Settings, Easy, Medium, Hard };
+enum class Choice : uint8_t {
+    None, Back,
+    OnePlayer, TwoPlayer, Settings,  // main menu
+    Easy, Medium, Hard,              // difficulty
+    Resume, Hint, Quit,              // in-game pause menu
+};
 
 struct Item {
     const char* label;  // up to 19 characters
     Choice choice;
-    bool enabled;       // disabled items show but can't be chosen
+    bool enabled;       // disabled items show struck through and can't be chosen (blocked sound)
 };
 
 // A list menu: turn to move the highlight, click to choose, hold to go back. Shows three items
@@ -26,8 +31,11 @@ public:
         : matrix_(matrix), screen_(screen), items_(items), count_(count), hint_(hint),
           selected_(initial) {}
 
-    // Draws the menu. Call when entering it.
-    void start();
+    // Draws the menu. Call when entering it. The LEDs are switched off unless `keep_leds`
+    // (e.g. a pause menu over the game board).
+    void start(bool keep_leds = false);
+    // Moves the highlight, e.g. back to the first item each time a menu opens.
+    void select(uint8_t index) { selected_ = index; top_ = 0; }
     // Returns the clicked item's choice, Choice::Back on hold, or Choice::None. Plays the move,
     // select and blocked sounds; the caller plays the back sound if it acts on Choice::Back.
     Choice update(const input::Events& in, uint32_t now_ms);

@@ -21,6 +21,7 @@ constexpr uint32_t kCursorOffMs = 250;
 
 // Debug: depth of the search that scores each column for the person about to move.
 constexpr uint8_t kEvalDepth = 5;
+
 // Debug: second click within this long of the first = undo.
 constexpr uint32_t kDoubleClickMs = 350;
 
@@ -124,6 +125,7 @@ void Game::start(const Setup& setup, uint32_t now_ms, uint32_t seed) {
     rng_.reseed(seed);
     aim_col_ = game::kCols / 2;
     have_bot_stats_ = false;
+    paused_ = false;  // left by QUIT
     new_game(Player::Red, now_ms);
 }
 
@@ -132,8 +134,9 @@ void Game::new_game(Player first, uint32_t now_ms) {
     board_.reset(first);
     history_len_ = 0;
     pending_click_ = false;
+    hint_ = false;  // a hint never carries into another game
     have_bot_stats_ = false;
-    exit_requested_ = false;
+    pause_requested_ = false;
     begin_turn(now_ms);
     screen_dirty_ = true;
 }
@@ -169,6 +172,8 @@ void Game::start_drop(uint8_t col, uint32_t now_ms) {
         return;
     }
     history_[history_len_++] = col;
+    hint_ = false;  // a hint lasts one turn
+    pending_click_ = false;
     drop_col_ = col;
     drop_led_row_ = 0;
     drop_target_ = led_row(static_cast<uint8_t>(row));
@@ -182,8 +187,13 @@ void Game::start_drop(uint8_t col, uint32_t now_ms) {
 }
 
 bool Game::update(const input::Events& event, uint32_t now_ms) {
+    if (paused_) {
+        return update_paused(event, now_ms);
+    }
     if (event.gesture == input::Gesture::Hold) {
-        return false;
+        pending_click_ = false;
+        pause(now_ms);
+        return true;
     }
     input::Events in = event;
     if (!settings::values().debug || (state_ != State::Aim && state_ != State::Over)) {
@@ -214,8 +224,10 @@ bool Game::update(const input::Events& event, uint32_t now_ms) {
         case State::Drop: drop(now_ms); break;
         case State::Over: over(in, now_ms); break;
     }
-    if (exit_requested_) {
-        return false;
+    if (pause_requested_) {
+        pause_requested_ = false;
+        pause(now_ms);
+        return true;
     }
 
     // Brightness can change by itself in auto mode.
@@ -238,6 +250,7 @@ void Game::aim(const input::Events& in, uint32_t now_ms) {
             aim_col_ = static_cast<uint8_t>(c);
             show_cursor(now_ms);
             sound::play(sound::Id::Aim, now_ms);
+            screen_dirty_ = screen_dirty_ || hint_;  // the hint follows the cursor
         }
     }
 
@@ -269,7 +282,7 @@ bool Game::on_search_progress(void* ctx) {
     auto* self = static_cast<Game*>(ctx);
     // Keep the button's debounce running; knob turns and clicks during the bot's turn are dropped.
     if (self->platform_.poll().gesture == input::Gesture::Hold) {
-        self->exit_requested_ = true;
+        self->pause_requested_ = true;
         return false;
     }
     const uint32_t now = self->platform_.now_ms();
@@ -289,11 +302,13 @@ void Game::think(uint32_t now_ms) {
     hooks.now_ms = platform_.now_ms;
     hooks.progress = &Game::on_search_progress;
     hooks.ctx = this;
-    bot_target_ = bot::choose(board_, setup_.level, rng_, hooks, &bot_stats_);
-    have_bot_stats_ = true;
-    if (exit_requested_) {
-        return;
+    bot::Stats stats;
+    bot_target_ = bot::choose(board_, setup_.level, rng_, hooks, &stats);
+    if (pause_requested_) {
+        return;  // search abandoned; it starts over after the pause
     }
+    bot_stats_ = stats;
+    have_bot_stats_ = true;
     state_ = State::BotAim;
 }
 
@@ -355,7 +370,7 @@ void Game::over(const input::Events& in, uint32_t now_ms) {
     }
 }
 
-void Game::undo(uint32_t now_ms) {
+int8_t Game::undo_target() const {
     uint8_t n = history_len_;
     if (setup_.vs_bot) {
         // Back to the player's last move, so it's their turn again.
@@ -363,11 +378,16 @@ void Game::undo(uint32_t now_ms) {
             --n;
         }
     }
-    if (n == 0) {
+    return static_cast<int8_t>(n - 1);
+}
+
+void Game::undo(uint32_t now_ms) {
+    const int8_t target = undo_target();
+    if (target < 0) {
         sound::play(sound::Id::Blocked, now_ms);  // nothing (of the player's) to take back
         return;
     }
-    --n;
+    const auto n = static_cast<uint8_t>(target);
     aim_col_ = history_[n];  // the cursor goes back to where the piece was
     history_len_ = n;
     board_.reset(first_);
@@ -375,9 +395,61 @@ void Game::undo(uint32_t now_ms) {
         board_.play(history_[i]);
     }
     have_bot_stats_ = false;  // they described a move that's gone now
+    hint_ = false;
     sound::play(sound::Id::MenuBack, now_ms);
     begin_turn(now_ms);
     leds_dirty_ = true;
+}
+
+void Game::pause(uint32_t now_ms) {
+    paused_ = true;
+    pause_start_ms_ = now_ms;
+    // The player's turn, no hint yet, and not in debug mode (its screen already scores every
+    // column and has no room for the hint line).
+    pause_items_[1].enabled = state_ == State::Aim && !hint_ && !settings::values().debug;
+    pause_menu_.select(0);
+    sound::play(sound::Id::MenuSelect, now_ms);
+    // The board stays up, frozen; an aiming piece is shown solid.
+    blink_on_ = true;
+    render_leds();
+    leds_dirty_ = false;
+    pause_menu_.start(true);
+}
+
+void Game::resume(uint32_t now_ms) {
+    paused_ = false;
+    // Pick up animations where they stopped.
+    const uint32_t paused_for = now_ms - pause_start_ms_;
+    think_start_ms_ += paused_for;
+    next_scan_ms_ += paused_for;
+    next_step_ms_ += paused_for;
+    if (state_ == State::Aim) {
+        show_cursor(now_ms);
+    }
+    leds_dirty_ = true;
+    screen_dirty_ = true;
+}
+
+bool Game::update_paused(const input::Events& in, uint32_t now_ms) {
+    switch (pause_menu_.update(in, now_ms)) {
+        case menu::Choice::Back:
+            sound::play(sound::Id::MenuBack, now_ms);
+            resume(now_ms);
+            break;
+        case menu::Choice::Resume: resume(now_ms); break;
+        case menu::Choice::Hint:  // only offered on the player's turn, outside debug mode
+            hint_ = true;
+            bot::analyze(board_, kEvalDepth, analysis_);
+            resume(now_ms);
+            break;
+        case menu::Choice::Quit: return false;
+        default:
+            if (settings::led_pwm() != shown_pwm_) {
+                render_leds();  // auto brightness keeps working while paused
+            }
+            break;
+    }
+    return true;
 }
 
 sound::Id Game::result_sound() const {
@@ -532,6 +604,32 @@ void Game::render_columns(uint8_t at) {
     }
 }
 
+// Hint line: how good the column under the cursor is for the person about to move, from the
+// same search as the debug column scores. Forced results are counted in the winner's moves.
+//   "COL 4: +22 BEST"   "COL 2: -5"   "COL 3: WINS NOW"   "COL 3: WINS IN 2"
+//   "COL 1: LOSES NEXT" (the reply wins)   "COL 1: LOSES IN 2"   "COL 5: FULL"
+void Game::render_hint() {
+    char line[24];
+    const int32_t s = analysis_.scores[aim_col_];
+    char* p = put(put(put(line, "COL "), static_cast<uint32_t>(aim_col_ + 1)), ": ");
+    if (s == bot::kFullColumn) {
+        put(p, "FULL");
+    } else if (s >= bot::kWinThreshold) {
+        const auto moves = static_cast<uint32_t>((bot::kWinScore - s + 1) / 2);
+        moves <= 1 ? put(p, "WINS NOW") : put(put(p, "WINS IN "), moves);
+    } else if (s <= -bot::kWinThreshold) {
+        const auto moves = static_cast<uint32_t>((bot::kWinScore + s) / 2);
+        moves <= 1 ? put(p, "LOSES NEXT") : put(put(p, "LOSES IN "), moves);
+    } else {
+        p = s > 0 ? put(put(p, "+"), static_cast<uint32_t>(s))
+                  : (s < 0 ? put(put(p, "-"), static_cast<uint32_t>(-s)) : put(p, "0"));
+        if (s == analysis_.best) {
+            put(p, " BEST");
+        }
+    }
+    centered(screen_, 3, line);
+}
+
 void Game::render_screen() {
     char line[22];
     screen_.clear();
@@ -561,7 +659,11 @@ void Game::render_screen() {
         }
         centered(screen_, 2, "HOLD=MENU");
         if (!bot_turn()) {
-            centered(screen_, 3, "TURN=AIM  CLICK=DROP");
+            if (hint_) {
+                render_hint();
+            } else {
+                centered(screen_, 3, "TURN=AIM  CLICK=DROP");
+            }
         }
     } else {
         if (result == Result::Draw) {
