@@ -21,11 +21,11 @@ LCD, and a rotary encoder handles all input.
 - **Auto off** after 5 minutes without input, into the MCU's lowest-power mode until the next
   power cycle
 - **Debug mode**: bot insights on the LCD (who is ahead, the bot's search depth and positions
-  searched, live while it thinks, the line of moves it expects, and a score for every column you
-  could play), plus undo with a double-click
-- **Pause menu** (hold during a game): resume, get a hint and quit. A hint shows, for the rest of
-  your turn, how good the column under your cursor is (`COL 4: +22 BEST`, `WINS IN 2`,
-  `LOSES NEXT`)
+  searched, the line of moves it expects, and a score for every column you could play)
+- **Undo** with a double-click: takes back your last move (against the bot, its reply too),
+  also after a game ends
+- **Pause menu** (hold during a game): resume, get a hint and quit. A hint blinks a piece
+  where the best move would land, for the rest of your turn
 
 Planned: battery monitoring during play, with the low-battery LED and an automatic cutoff
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -37,7 +37,7 @@ Planned: battery monitoring during play, with the low-battery LED and an automat
 | Turn | Move the highlight | Move your piece along the top row |
 | Click | Choose | Drop the piece; after a game, play again |
 | Hold (1.5 s) | Back | Pause menu: resume, get hint, quit |
-| Double-click | | Debug mode only: undo (in 1-player, back to your last move), also after a game |
+| Double-click | | Undo (in 1-player, back to your last move), also after a game |
 
 ## Hardware
 

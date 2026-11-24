@@ -18,11 +18,13 @@ constexpr uint32_t kBlinkMs = 300;    // winning-line highlight
 // whenever it moves, so it never looks like it vanished mid-turn.
 constexpr uint32_t kCursorOnMs = 500;
 constexpr uint32_t kCursorOffMs = 250;
+// Hint piece blinks faster than the cursor, so the two are easy to tell apart.
+constexpr uint32_t kHintBlinkMs = 150;
 
 // Debug: depth of the search that scores each column for the person about to move.
 constexpr uint8_t kEvalDepth = 5;
 
-// Debug: second click within this long of the first = undo.
+// Second click within this long of the first = undo.
 constexpr uint32_t kDoubleClickMs = 350;
 
 // Bot pacing, so its moves are easy to follow even when the search is instant.
@@ -196,10 +198,10 @@ bool Game::update(const input::Events& event, uint32_t now_ms) {
         return true;
     }
     input::Events in = event;
-    if (!settings::values().debug || (state_ != State::Aim && state_ != State::Over)) {
+    if (state_ != State::Aim && state_ != State::Over) {
         pending_click_ = false;
     } else {
-        // Debug: hold each click back until it's clear it isn't the first of a double-click.
+        // Hold each click back until it's clear it isn't the first of a double-click.
         if (in.gesture == input::Gesture::Click) {
             in.gesture = input::Gesture::None;
             if (pending_click_) {
@@ -250,7 +252,6 @@ void Game::aim(const input::Events& in, uint32_t now_ms) {
             aim_col_ = static_cast<uint8_t>(c);
             show_cursor(now_ms);
             sound::play(sound::Id::Aim, now_ms);
-            screen_dirty_ = screen_dirty_ || hint_;  // the hint follows the cursor
         }
     }
 
@@ -266,6 +267,11 @@ void Game::aim(const input::Events& in, uint32_t now_ms) {
     if (due(now_ms, next_step_ms_)) {
         blink_on_ = !blink_on_;
         next_step_ms_ = now_ms + (blink_on_ ? kCursorOnMs : kCursorOffMs);
+        leds_dirty_ = true;
+    }
+    if (hint_ && due(now_ms, next_hint_ms_)) {
+        hint_on_ = !hint_on_;
+        next_hint_ms_ = now_ms + kHintBlinkMs;
         leds_dirty_ = true;
     }
 }
@@ -404,9 +410,7 @@ void Game::undo(uint32_t now_ms) {
 void Game::pause(uint32_t now_ms) {
     paused_ = true;
     pause_start_ms_ = now_ms;
-    // The player's turn, no hint yet, and not in debug mode (its screen already scores every
-    // column and has no room for the hint line).
-    pause_items_[1].enabled = state_ == State::Aim && !hint_ && !settings::values().debug;
+    pause_items_[1].enabled = state_ == State::Aim && !hint_;  // the player's turn, no hint yet
     pause_menu_.select(0);
     sound::play(sound::Id::MenuSelect, now_ms);
     // The board stays up, frozen; an aiming piece is shown solid.
@@ -423,6 +427,7 @@ void Game::resume(uint32_t now_ms) {
     think_start_ms_ += paused_for;
     next_scan_ms_ += paused_for;
     next_step_ms_ += paused_for;
+    next_hint_ms_ += paused_for;
     if (state_ == State::Aim) {
         show_cursor(now_ms);
     }
@@ -437,10 +442,14 @@ bool Game::update_paused(const input::Events& in, uint32_t now_ms) {
             resume(now_ms);
             break;
         case menu::Choice::Resume: resume(now_ms); break;
-        case menu::Choice::Hint:  // only offered on the player's turn, outside debug mode
-            hint_ = true;
-            bot::analyze(board_, kEvalDepth, analysis_);
+        case menu::Choice::Hint:  // only offered on the player's turn
+            if (!settings::values().debug) {
+                bot::analyze(board_, kEvalDepth, analysis_);  // debug keeps it up to date anyway
+            }
             resume(now_ms);
+            hint_ = true;
+            hint_on_ = true;
+            next_hint_ms_ = now_ms + kHintBlinkMs;
             break;
         case menu::Choice::Quit: return false;
         default:
@@ -496,6 +505,11 @@ void Game::render_leds() {
             matrix_.set(drop_led_row_, drop_col_, color_of(drop_player_), pwm);
             break;
         case State::Aim:
+            if (hint_ && hint_on_) {
+                // Where the best move would land (the column can't be full: it's playable).
+                const uint8_t col = analysis_.best_col;
+                matrix_.set(led_row(board_.height(col)), col, color_of(board_.to_move()), pwm);
+            }
             if (blink_on_) {
                 matrix_.set(0, aim_col_, color_of(board_.to_move()), pwm);
             }
@@ -604,32 +618,6 @@ void Game::render_columns(uint8_t at) {
     }
 }
 
-// Hint line: how good the column under the cursor is for the person about to move, from the
-// same search as the debug column scores. Forced results are counted in the winner's moves.
-//   "COL 4: +22 BEST"   "COL 2: -5"   "COL 3: WINS NOW"   "COL 3: WINS IN 2"
-//   "COL 1: LOSES NEXT" (the reply wins)   "COL 1: LOSES IN 2"   "COL 5: FULL"
-void Game::render_hint() {
-    char line[24];
-    const int32_t s = analysis_.scores[aim_col_];
-    char* p = put(put(put(line, "COL "), static_cast<uint32_t>(aim_col_ + 1)), ": ");
-    if (s == bot::kFullColumn) {
-        put(p, "FULL");
-    } else if (s >= bot::kWinThreshold) {
-        const auto moves = static_cast<uint32_t>((bot::kWinScore - s + 1) / 2);
-        moves <= 1 ? put(p, "WINS NOW") : put(put(p, "WINS IN "), moves);
-    } else if (s <= -bot::kWinThreshold) {
-        const auto moves = static_cast<uint32_t>((bot::kWinScore + s) / 2);
-        moves <= 1 ? put(p, "LOSES NEXT") : put(put(p, "LOSES IN "), moves);
-    } else {
-        p = s > 0 ? put(put(p, "+"), static_cast<uint32_t>(s))
-                  : (s < 0 ? put(put(p, "-"), static_cast<uint32_t>(-s)) : put(p, "0"));
-        if (s == analysis_.best) {
-            put(p, " BEST");
-        }
-    }
-    centered(screen_, 3, line);
-}
-
 void Game::render_screen() {
     char line[22];
     screen_.clear();
@@ -657,13 +645,9 @@ void Game::render_screen() {
             std::strcat(line, "'S TURN");
             centered(screen_, 1, line);
         }
-        centered(screen_, 2, "HOLD=MENU");
-        if (!bot_turn()) {
-            if (hint_) {
-                render_hint();
-            } else {
-                centered(screen_, 3, "TURN=AIM  CLICK=DROP");
-            }
+        if (!bot_turn()) {  // left blank while the bot thinks
+            centered(screen_, 2, "HOLD=MENU 2X=UNDO");
+            centered(screen_, 3, "TURN=AIM  CLICK=DROP");
         }
     } else {
         if (result == Result::Draw) {
@@ -675,7 +659,7 @@ void Game::render_screen() {
         } else {
             centered(screen_, 1, result == Result::RedWins ? "RED WINS!" : "YELLOW WINS!");
         }
-        centered(screen_, 2, debug ? "HOLD=MENU 2X=UNDO" : "HOLD=MENU");
+        centered(screen_, 2, "HOLD=MENU 2X=UNDO");
         centered(screen_, 3, "CLICK=PLAY AGAIN");
     }
     screen_.show();

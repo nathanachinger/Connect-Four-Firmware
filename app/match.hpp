@@ -30,13 +30,14 @@ struct Platform {
 //
 // Hold (any time, also while the bot is thinking) pauses with a menu over the frozen board:
 //   RESUME
-//   GET HINT  on the player's turn: until they drop, the LCD shows how good the column under the
-//             cursor is (unavailable in debug mode, whose screen already scores every column)
+//   GET HINT  on the player's turn: until they drop, a piece in their color blinks quickly where
+//             the best move would land
 //   QUIT      back to the main menu
 //
-// Debug mode (settings) adds bot insights on the LCD and undo: double-click takes back the last
-// move (in 1 player, back to the player's last move), also after the game ends. A single click
-// then acts once the double-click window has passed.
+// Double-click takes back the last move (in 1 player, back to the player's last move), also
+// after the game ends. So a single click acts once the double-click window has passed.
+//
+// Debug mode (settings) adds bot insights on the LCD.
 class Game {
 public:
     Game(led::Matrix& matrix, lcd::Display& screen, const Platform& platform)
@@ -89,7 +90,6 @@ private:
     sound::Id result_sound() const;
     void render_debug();
     void render_columns(uint8_t line);
-    void render_hint();
     void render_leds();
     void render_screen();
 
@@ -120,9 +120,11 @@ private:
 
     // Every column scored for the person about to move (hint and debug).
     bot::Analysis analysis_ = {};
-    bool hint_ = false;  // hint for this turn
+    bool hint_ = false;          // hint for this turn
+    bool hint_on_ = false;       // hint piece visible (it blinks)
+    uint32_t next_hint_ms_ = 0;  // next hint blink
 
-    // Debug: a click waiting to see whether a second one makes it a double-click.
+    // A click waiting to see whether a second one makes it a double-click.
     bool pending_click_ = false;
     uint32_t pending_until_ms_ = 0;
 
