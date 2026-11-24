@@ -18,9 +18,11 @@ LCD, and a rotary encoder handles all input.
 - **Settings**: brightness (auto or 1–10), sound effects on/off and debug mode, saved across
   power cycles
 - **Battery estimate** on the startup screen, with a low-battery warning
-- **Auto off** after 2 minutes without input, into the MCU's lowest-power mode until the next
+- **Auto off** after 5 minutes without input, into the MCU's lowest-power mode until the next
   power cycle
-- **Debug mode**: the bot's search stats in 1-player games and who is ahead in either mode
+- **Debug mode**: bot insights on the LCD (who is ahead, the bot's search depth and positions
+  searched, live while it thinks, the line of moves it expects, and a score for every column you
+  could play), plus undo with a double-click
 
 Planned: battery monitoring during play, with the low-battery LED and an automatic cutoff
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -32,6 +34,7 @@ Planned: battery monitoring during play, with the low-battery LED and an automat
 | Turn | Move the highlight | Move your piece along the top row |
 | Click | Choose | Drop the piece; after a game, play again |
 | Hold (1.5 s) | Back | Return to the main menu |
+| Double-click | | Debug mode only: undo (in 1-player, back to your last move), also after a game |
 
 ## Hardware
 

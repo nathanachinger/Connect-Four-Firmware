@@ -108,7 +108,7 @@ cmake --preset Debug && cmake --build --preset Debug
   thinks is ahead; in 2-player games, a quick 5-ply search shows who is ahead.
 - **Battery** (`battery.cpp`): pack voltage from the divider with VDDA measured against VREFINT;
   shown at startup as a percent along an alkaline discharge curve (4.0 V = 0%).
-- **Auto off / Shutdown** (`power.cpp`): after 2 minutes without input: speaker off → IS31
+- **Auto off / Shutdown** (`power.cpp`): after 5 minutes without input: speaker off → IS31
   software shutdown → display sleep → backlight off → STM32 Shutdown, no wake source. PWR
   pull-ups/downs hold only the display lines that lack external resistors (PB8 up, PB9–PB11
   down); they are cleared again at boot.

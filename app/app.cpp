@@ -20,7 +20,7 @@ namespace {
 constexpr uint32_t kLoopMs = 2;  // input poll rate; well under the 20 ms debounce
 constexpr uint32_t kStartupMs = 1500;  // startup screen; a click skips it
 constexpr uint8_t kLowBatteryPercent = 10;
-constexpr uint32_t kAutoOffMs = 2 * 60 * 1000;  // no input for this long -> shut down
+constexpr uint32_t kAutoOffMs = 5 * 60 * 1000;  // no input for this long -> shut down
 constexpr uint32_t kAutoOffNoticeMs = 1500;     // "AUTO OFF" message before going dark
 
 constexpr menu::Item kMainItems[] = {

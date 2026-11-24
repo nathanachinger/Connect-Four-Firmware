@@ -123,8 +123,18 @@ public:
     // Only the first iteration of a timed search must always finish, so we always have a move.
     bool may_abort = false;
 
+    // Expected line found below the node at `ply` (its best move first), from the last search.
+    // Lines are tracked for the first kPvMax plies only.
+    const uint8_t* pv(uint8_t ply) const { return pv_[ply]; }
+    uint8_t pv_len(uint8_t ply) const { return ply < kPvMax ? pv_len_[ply] : 0; }
+
 private:
     void poll();
+    void set_pv(uint8_t ply, uint8_t col);
+
+    // Triangular table: row `ply` holds the line from that ply on.
+    uint8_t pv_[kPvMax][kPvMax] = {};
+    uint8_t pv_len_[kPvMax] = {};
 
     Hooks hooks_;  // by value: callers may pass a temporary
     uint32_t deadline_ms_;
@@ -132,6 +142,18 @@ private:
     uint32_t next_poll_ = kPollNodes;
     static constexpr uint32_t kPollNodes = 2048;
 };
+
+void Searcher::set_pv(uint8_t ply, uint8_t col) {
+    if (ply >= kPvMax) {
+        return;
+    }
+    pv_[ply][0] = col;
+    uint8_t n = 1;
+    for (uint8_t i = 0; i < pv_len(static_cast<uint8_t>(ply + 1)) && n < kPvMax; ++i) {
+        pv_[ply][n++] = pv_[ply + 1][i];
+    }
+    pv_len_[ply] = n;
+}
 
 void Searcher::poll() {
     next_poll_ = nodes + kPollNodes;
@@ -152,6 +174,9 @@ int32_t Searcher::negamax(uint64_t cur, uint64_t mask, uint8_t moves, uint8_t de
     if (aborted) {
         return 0;
     }
+    if (ply < kPvMax) {
+        pv_len_[ply] = 0;
+    }
     if (moves == kMaxMoves) {
         return 0;  // full board, nobody won
     }
@@ -159,6 +184,12 @@ int32_t Searcher::negamax(uint64_t cur, uint64_t mask, uint8_t moves, uint8_t de
     const uint64_t open = playable(mask);
     const uint64_t mine = winning_cells(cur, mask);
     if (mine & open) {
+        for (uint8_t c = 0; c < kCols; ++c) {
+            if (mine & open & column(c)) {
+                set_pv(ply, c);
+                break;
+            }
+        }
         return kWin - ply - 1;  // win with this move
     }
 
@@ -195,6 +226,7 @@ int32_t Searcher::negamax(uint64_t cur, uint64_t mask, uint8_t moves, uint8_t de
             best = score;
             if (score > alpha) {
                 alpha = score;
+                set_pv(ply, col);
                 if (alpha >= beta) {
                     break;
                 }
@@ -215,11 +247,30 @@ Position position_of(const game::Board& board) {
     return {cur, cur | board.pieces(game::other(board.to_move())), board.moves()};
 }
 
+// Expected line for each root move.
+struct RootLines {
+    uint8_t pv[kCols][kPvMax];
+    uint8_t len[kCols];
+
+    void set(uint8_t col, const Searcher& s) {
+        pv[col][0] = col;
+        uint8_t n = 1;
+        for (uint8_t i = 0; i < s.pv_len(1) && n < kPvMax; ++i) {
+            pv[col][n++] = s.pv(1)[i];
+        }
+        len[col] = n;
+    }
+    void win(uint8_t col) {
+        pv[col][0] = col;
+        len[col] = 1;
+    }
+};
+
 // One full-width search of every root move. Scores are exact for every move tied with the best
 // (searched with alpha = best - 1), so ties can be broken at random. Returns the best score and
-// fills `best_cols` with the tied columns.
+// fills `best_cols` with the tied columns, and `lines` with their expected lines.
 int32_t search_root(Searcher& s, const Position& p, uint8_t depth, const uint8_t* order,
-                    uint8_t* best_cols, uint8_t& best_count) {
+                    uint8_t* best_cols, uint8_t& best_count, RootLines& lines) {
     best_count = 0;
     // Children assume the previous move didn't win, so take immediate wins here.
     const uint64_t wins = playable(p.mask) & winning_cells(p.cur, p.mask);
@@ -227,6 +278,7 @@ int32_t search_root(Searcher& s, const Position& p, uint8_t depth, const uint8_t
         for (uint8_t c = 0; c < kCols; ++c) {
             if (wins & column(c)) {
                 best_cols[best_count++] = c;
+                lines.win(c);
             }
         }
         return kWin - 1;
@@ -252,6 +304,7 @@ int32_t search_root(Searcher& s, const Position& p, uint8_t depth, const uint8_t
         }
         if (score == best) {
             best_cols[best_count++] = col;
+            lines.set(col, s);
         }
     }
     return best;
@@ -294,6 +347,46 @@ int32_t search(const game::Board& board, uint8_t depth) {
     return s.negamax(p.cur, p.mask, p.moves, depth, -kInfinity, kInfinity, 0);
 }
 
+void analyze(const game::Board& board, uint8_t depth, Analysis& out) {
+    const Position p = position_of(board);
+    Searcher s({}, 0, false);
+    const uint64_t open = playable(p.mask);
+    const uint64_t wins = open & winning_cells(p.cur, p.mask);
+    RootLines lines;
+    for (uint8_t c = 0; c < kCols; ++c) {
+        const uint64_t move = open & column(c);
+        if (move == 0) {
+            out.scores[c] = kFullColumn;
+        } else if (wins & move) {
+            out.scores[c] = kWin - 1;
+            lines.win(c);
+        } else if (depth <= 1) {
+            out.scores[c] = -evaluate(p.cur ^ p.mask, p.mask | move,
+                                      winning_cells(p.cur ^ p.mask, p.mask | move),
+                                      winning_cells(p.cur | move, p.mask | move));
+            lines.win(c);  // just the move itself
+        } else {
+            // Full window, so every column's score is exact, not just the best one's.
+            out.scores[c] = -s.negamax(p.cur ^ p.mask, p.mask | move,
+                                       static_cast<uint8_t>(p.moves + 1),
+                                       static_cast<uint8_t>(depth - 1), -kInfinity, kInfinity, 1);
+            lines.set(c, s);
+        }
+    }
+    out.best = kFullColumn;
+    out.best_col = 0;
+    for (const uint8_t c : kOrder) {
+        if (out.scores[c] > out.best) {
+            out.best = out.scores[c];
+            out.best_col = c;
+        }
+    }
+    out.pv_len = lines.len[out.best_col];
+    for (uint8_t j = 0; j < out.pv_len; ++j) {
+        out.pv[j] = lines.pv[out.best_col][j];
+    }
+}
+
 uint8_t choose(const game::Board& board, Level level, Rng& rng, const Hooks& hooks,
                Stats* stats) {
     const Position p = position_of(board);
@@ -315,17 +408,23 @@ uint8_t choose(const game::Board& board, Level level, Rng& rng, const Hooks& hoo
         }
         uint8_t best_cols[kCols];
         uint8_t best_count = 0;
+        RootLines lines;          // from the depth being searched
+        RootLines best_lines;     // from the last finished depth
         // Fixed-depth levels go straight to their depth; Hard deepens one ply at a time.
         for (uint8_t depth = timed ? 1 : max_depth; depth <= max_depth; ++depth) {
             uint8_t cols[kCols];
             uint8_t count = 0;
-            const int32_t score = search_root(s, p, depth, order, cols, count);
+            const int32_t score = search_root(s, p, depth, order, cols, count, lines);
             if (s.aborted) {
                 break;
             }
             best_count = count;
             for (uint8_t i = 0; i < count; ++i) {
                 best_cols[i] = cols[i];
+                best_lines.len[cols[i]] = lines.len[cols[i]];
+                for (uint8_t j = 0; j < lines.len[cols[i]]; ++j) {
+                    best_lines.pv[cols[i]][j] = lines.pv[cols[i]][j];
+                }
             }
             st.depth = depth;
             st.score = score;
@@ -356,6 +455,10 @@ uint8_t choose(const game::Board& board, Level level, Rng& rng, const Hooks& hoo
         st.aborted = s.aborted && best_count == 0;
         if (best_count > 0) {
             choice = best_cols[rng.below(best_count)];
+            st.pv_len = best_lines.len[choice];
+            for (uint8_t j = 0; j < st.pv_len; ++j) {
+                st.pv[j] = best_lines.pv[choice][j];
+            }
         } else {
             // Aborted before the first depth finished: any legal move.
             for (const uint8_t c : kOrder) {

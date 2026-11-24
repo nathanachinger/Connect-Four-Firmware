@@ -27,6 +27,9 @@ private:
     uint32_t state_;
 };
 
+// Longest expected line (principal variation) that is tracked: enough to fill one LCD line.
+inline constexpr uint8_t kPvMax = 8;
+
 struct Hooks {
     // Millisecond clock. Needed for Hard's time budget; without it Hard searches to kMediumDepth.
     uint32_t (*now_ms)() = nullptr;
@@ -42,6 +45,10 @@ struct Stats {
     uint8_t depth;   // deepest completed search (0 for Easy)
     int32_t score;   // from the bot's point of view; > 0 is good
     bool aborted;    // progress() stopped it before any depth finished; the move is just legal
+    // Expected line, starting with the chosen move: the bot's move, the reply it expects, and so
+    // on (columns 0-6). Empty for Easy. Ends early if the game ends.
+    uint8_t pv[kPvMax];
+    uint8_t pv_len;
 };
 
 // Chooses a column for the side to move. The game must not be over.
@@ -55,5 +62,18 @@ inline constexpr int32_t kWinThreshold = kWinScore - 64;
 
 // Depth-limited negamax score for the side to move, exposed for testing.
 int32_t search(const game::Board& board, uint8_t depth);
+
+// Every column scored for the side to move by a full search `depth` plies deep (the move
+// itself included), e.g. to show a player their options. Same scale as Stats::score.
+inline constexpr int32_t kFullColumn = -2147483647 - 1;  // INT32_MIN: column can't be played
+struct Analysis {
+    int32_t scores[game::kCols];  // kFullColumn where the column is full
+    int32_t best;                 // best of scores: the position's score for the side to move
+    uint8_t best_col;             // the most central column with the best score
+    uint8_t pv[kPvMax];           // expected line starting with best_col
+    uint8_t pv_len;
+};
+// The game must not be over.
+void analyze(const game::Board& board, uint8_t depth, Analysis& out);
 
 }  // namespace bot

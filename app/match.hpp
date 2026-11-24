@@ -25,6 +25,10 @@ struct Platform {
 // One game screen for both modes. Turn to aim along the top LED row, click to drop. Against the
 // bot, the player is red and the bot is yellow; who starts alternates each game, player first.
 // After a game, click to play again. Hold returns to the menu (also while the bot is thinking).
+//
+// Debug mode (settings) adds bot insights on the LCD and undo: double-click takes back the last
+// move (in 1 player, back to the player's last move), also after the game ends. A single click
+// then acts once the double-click window has passed.
 class Game {
 public:
     Game(led::Matrix& matrix, lcd::Display& screen, const Platform& platform)
@@ -58,6 +62,10 @@ private:
     void bot_aim(uint32_t now_ms);
     void drop(uint32_t now_ms);
     void over(const input::Events& in, uint32_t now_ms);
+    void undo(uint32_t now_ms);
+    game::Player mover_of(uint8_t move) const {
+        return move % 2 == 0 ? first_ : game::other(first_);
+    }
 
     // Moves the "thinking" piece one step along the top row, bouncing at the ends.
     void step_scan();
@@ -65,6 +73,7 @@ private:
 
     sound::Id result_sound() const;
     void render_debug();
+    void render_columns(uint8_t line);
     void render_leds();
     void render_screen();
 
@@ -87,7 +96,18 @@ private:
 
     bot::Rng rng_;
     bot::Stats bot_stats_ = {};
-    bool have_bot_stats_ = false;  // a bot move has been searched this session
+    bool have_bot_stats_ = false;  // bot_stats_ describe the bot's latest move on the board
+
+    // Columns played this game, in order, for undo.
+    uint8_t history_[game::kCols * game::kRows] = {};
+    uint8_t history_len_ = 0;
+
+    // Debug: a click waiting to see whether a second one makes it a double-click.
+    bool pending_click_ = false;
+    uint32_t pending_until_ms_ = 0;
+
+    // Debug: every column scored for the person about to move.
+    bot::Analysis analysis_ = {};
 
     // Falling piece: column, current and final LED row, and which player dropped it.
     uint8_t drop_col_ = 0;

@@ -19,8 +19,10 @@ constexpr uint32_t kBlinkMs = 300;    // winning-line highlight
 constexpr uint32_t kCursorOnMs = 500;
 constexpr uint32_t kCursorOffMs = 250;
 
-// Debug: depth of the quick search that scores 2-player positions (a few ms on the target).
+// Debug: depth of the search that scores each column for the person about to move.
 constexpr uint8_t kEvalDepth = 5;
+// Debug: second click within this long of the first = undo.
+constexpr uint32_t kDoubleClickMs = 350;
 
 // Bot pacing, so its moves are easy to follow even when the search is instant.
 constexpr uint32_t kScanStepMs = 110;   // "thinking" piece sweeping the top row
@@ -72,6 +74,47 @@ char* put(char* p, uint32_t v) {
 // Up to 99999 exactly, then in thousands ("1234K") so it fits.
 char* put_count(char* p, uint32_t v) { return v < 100000 ? put(p, v) : put(put(p, v / 1000), "K"); }
 
+// "D9 N63186 900MS": depth, positions searched, time.
+char* put_stats(char* p, uint8_t depth, uint32_t nodes, uint32_t ms) {
+    p = put_count(put(put(put(p, "D"), depth), " N"), nodes);
+    return put(put(put(p, " "), ms), "MS");
+}
+
+// "PV 4 3 4 5": an expected line, columns numbered 1-7 from the left.
+char* put_pv(char* p, const uint8_t* pv, uint8_t len) {
+    if (len == 0) {
+        return p;
+    }
+    p = put(p, "PV");
+    for (uint8_t i = 0; i < len; ++i) {
+        p = put(put(p, " "), static_cast<uint32_t>(pv[i] + 1));
+    }
+    return p;
+}
+
+// Who a score favors, in words. `score` is from side A's point of view.
+struct Side {
+    const char* wins;   // "BOT WINS IN "
+    const char* ahead;  // "BOT AHEAD BY "
+};
+constexpr Side kYou = {"YOU WIN IN ", "YOU'RE AHEAD BY "};
+constexpr Side kBot = {"BOT WINS IN ", "BOT AHEAD BY "};
+constexpr Side kRed = {"RED WINS IN ", "RED AHEAD BY "};
+constexpr Side kYellow = {"YELLOW WINS IN ", "YELLOW AHEAD BY "};
+
+// A forced result reads "... WINS IN n PLY", n counting half-moves from the searched position.
+char* put_ahead(char* p, int32_t score, const Side& a, const Side& b) {
+    const Side& leader = score > 0 ? a : b;
+    const auto magnitude = static_cast<uint32_t>(score >= 0 ? score : -score);
+    if (magnitude >= static_cast<uint32_t>(bot::kWinThreshold)) {
+        return put(put(put(p, leader.wins), bot::kWinScore - magnitude), " PLY");
+    }
+    if (magnitude == 0) {
+        return put(p, "EVEN");
+    }
+    return put(put(p, leader.ahead), magnitude);
+}
+
 bool due(uint32_t now_ms, uint32_t at_ms) { return static_cast<int32_t>(now_ms - at_ms) >= 0; }
 
 }  // namespace
@@ -87,6 +130,9 @@ void Game::start(const Setup& setup, uint32_t now_ms, uint32_t seed) {
 void Game::new_game(Player first, uint32_t now_ms) {
     first_ = first;
     board_.reset(first);
+    history_len_ = 0;
+    pending_click_ = false;
+    have_bot_stats_ = false;
     exit_requested_ = false;
     begin_turn(now_ms);
     screen_dirty_ = true;
@@ -103,6 +149,9 @@ void Game::begin_turn(uint32_t now_ms) {
     } else {
         state_ = State::Aim;
         show_cursor(now_ms);
+        if (settings::values().debug) {
+            bot::analyze(board_, kEvalDepth, analysis_);
+        }
     }
     screen_dirty_ = true;
 }
@@ -119,6 +168,7 @@ void Game::start_drop(uint8_t col, uint32_t now_ms) {
     if (row < 0) {
         return;
     }
+    history_[history_len_++] = col;
     drop_col_ = col;
     drop_led_row_ = 0;
     drop_target_ = led_row(static_cast<uint8_t>(row));
@@ -131,9 +181,31 @@ void Game::start_drop(uint8_t col, uint32_t now_ms) {
     screen_dirty_ = !board_.over();
 }
 
-bool Game::update(const input::Events& in, uint32_t now_ms) {
-    if (in.gesture == input::Gesture::Hold) {
+bool Game::update(const input::Events& event, uint32_t now_ms) {
+    if (event.gesture == input::Gesture::Hold) {
         return false;
+    }
+    input::Events in = event;
+    if (!settings::values().debug || (state_ != State::Aim && state_ != State::Over)) {
+        pending_click_ = false;
+    } else {
+        // Debug: hold each click back until it's clear it isn't the first of a double-click.
+        if (in.gesture == input::Gesture::Click) {
+            in.gesture = input::Gesture::None;
+            if (pending_click_) {
+                pending_click_ = false;
+                undo(now_ms);
+            } else {
+                pending_click_ = true;
+                pending_until_ms_ = now_ms + kDoubleClickMs;
+            }
+        } else if (pending_click_ && due(now_ms, pending_until_ms_)) {
+            pending_click_ = false;
+            in.gesture = input::Gesture::Click;
+        }
+        if (pending_click_) {
+            in.steps = 0;  // drop where the click was
+        }
     }
     switch (state_) {
         case State::Aim: aim(in, now_ms); break;
@@ -283,6 +355,31 @@ void Game::over(const input::Events& in, uint32_t now_ms) {
     }
 }
 
+void Game::undo(uint32_t now_ms) {
+    uint8_t n = history_len_;
+    if (setup_.vs_bot) {
+        // Back to the player's last move, so it's their turn again.
+        while (n > 0 && mover_of(static_cast<uint8_t>(n - 1)) == kBotPlayer) {
+            --n;
+        }
+    }
+    if (n == 0) {
+        sound::play(sound::Id::Blocked, now_ms);  // nothing (of the player's) to take back
+        return;
+    }
+    --n;
+    aim_col_ = history_[n];  // the cursor goes back to where the piece was
+    history_len_ = n;
+    board_.reset(first_);
+    for (uint8_t i = 0; i < n; ++i) {
+        board_.play(history_[i]);
+    }
+    have_bot_stats_ = false;  // they described a move that's gone now
+    sound::play(sound::Id::MenuBack, now_ms);
+    begin_turn(now_ms);
+    leds_dirty_ = true;
+}
+
 sound::Id Game::result_sound() const {
     const Result result = board_.result();
     if (result == Result::Draw) {
@@ -341,67 +438,109 @@ void Game::render_leds() {
     matrix_.show();
 }
 
-// Debug view for lines 2-3, in place of the hints.
-//   1 player: the bot's last search ("D9 N63186 900MS": depth, positions searched, time), then
-//             who it thinks is ahead and by how much (a forced result shows as BOT WINS / YOU WIN
-//             IN n PLY, n counting half-moves from the position it searched, its own move
-//             included).
-//   2 player: the move number, then who is ahead by a quick search of the position, from Red's
-//             side (a forced result shows as RED/YELLOW WINS IN n PLY, counted from now).
+// Debug view, the whole screen while a game is on.
+//   2 player:        turn and move number / who is ahead / expected line / column scores
+//   1 player, you:   who is ahead / bot's last search / its expected line / column scores
+//   1 player, bot:   title / THINKING... / (blank) / who is ahead, from its previous search
+//                    (nothing changes until its piece lands)
+// Who is ahead comes from the bot's last search in 1 player (from the position it searched, a
+// forced result counting its own move), otherwise from the column scores. Column scores rate
+// each column for the side to move by a kEvalDepth search: Wn / Ln = forced win / loss in n ply,
+// "." = full; the best is highlighted.
 void Game::render_debug() {
     char line[24];
     if (!setup_.vs_bot) {
-        put(put(line, "MOVE "), static_cast<uint32_t>(board_.moves() + 1));
+        const bool red = board_.to_move() == Player::Red;
+        put(put(put(line, red ? "RED" : "YELLOW"), "'S TURN #"),
+            static_cast<uint32_t>(board_.moves() + 1));
+        centered(screen_, 0, line);
+        put_ahead(line, red ? analysis_.best : -analysis_.best, kRed, kYellow);
+        centered(screen_, 1, line);
+        put_pv(line, analysis_.pv, analysis_.pv_len);
         centered(screen_, 2, line);
+        render_columns(3);
+        return;
+    }
 
-        // Search scores for the side to move; flip it so positive always means Red.
-        const int32_t s = bot::search(board_, kEvalDepth);
-        const int32_t red = board_.to_move() == Player::Red ? s : -s;
-        const char* leader = red > 0 ? "RED" : "YELLOW";
-        const auto magnitude = static_cast<uint32_t>(red >= 0 ? red : -red);
-        if (magnitude >= static_cast<uint32_t>(bot::kWinThreshold)) {
-            put(put(put(put(line, leader), " WINS IN "), bot::kWinScore - magnitude), " PLY");
-        } else if (magnitude == 0) {
-            put(line, "EVEN");
-        } else {
-            put(put(put(line, leader), " AHEAD BY "), magnitude);
-        }
-        centered(screen_, 3, line);
-        return;
-    }
-    if (!have_bot_stats_) {
-        centered(screen_, 2, "BOT: NO MOVE YET");
-        return;
-    }
     const bot::Stats& st = bot_stats_;
-    if (setup_.level == bot::Level::Easy) {
-        centered(screen_, 2, "EASY: NO SEARCH");
-        put(put(line, st.ms), "MS");
-        centered(screen_, 3, line);
+    const bool searched = have_bot_stats_ && setup_.level != bot::Level::Easy;
+    // Line with the bot's search (or why there is none).
+    auto stats_line = [&](uint8_t at) {
+        if (!have_bot_stats_) {
+            centered(screen_, at, "NO BOT SEARCH");
+        } else if (setup_.level == bot::Level::Easy) {
+            centered(screen_, at, "EASY: NO SEARCH");
+        } else {
+            put_stats(line, st.depth, st.nodes, st.ms);
+            centered(screen_, at, line);
+        }
+    };
+
+    if (bot_turn()) {
+        std::strcpy(line, "1 PLAYER - ");
+        std::strcat(line, level_name(setup_.level));
+        centered(screen_, 0, line);
+        centered(screen_, 1, "THINKING...");
+        if (searched) {
+            put_ahead(line, st.score, kBot, kYou);
+            centered(screen_, 3, line);
+        }
         return;
     }
-    // Line 2: D<depth> N<nodes> <time>, e.g. "D9 N63186 900MS".
-    char* p = put_count(put(put(put(line, "D"), st.depth), " N"), st.nodes);
-    put(put(put(p, " "), st.ms), "MS");
-    centered(screen_, 2, line);
 
-    // Line 3: who is ahead. The bot scores from its own side, so positive means the bot.
-    const bool bot_ahead = st.score > 0;
-    const auto magnitude = static_cast<uint32_t>(st.score >= 0 ? st.score : -st.score);
-    if (magnitude >= static_cast<uint32_t>(bot::kWinThreshold)) {
-        p = put(line, bot_ahead ? "BOT WINS IN " : "YOU WIN IN ");
-        put(put(p, bot::kWinScore - magnitude), " PLY");
-    } else if (magnitude == 0) {
-        put(line, "EVEN");
+    if (searched) {
+        put_ahead(line, st.score, kBot, kYou);
     } else {
-        put(put(line, bot_ahead ? "BOT AHEAD BY " : "YOU'RE AHEAD BY "), magnitude);
+        put_ahead(line, analysis_.best, kYou, kBot);
     }
-    centered(screen_, 3, line);
+    centered(screen_, 0, line);
+    stats_line(1);
+    if (searched) {
+        put_pv(line, st.pv, st.pv_len);
+        centered(screen_, 2, line);
+    }
+    render_columns(3);
+}
+
+// Seven 18 px cells, one per column, e.g. " 12 -3  W3  .  -L4". The best is shown inverted.
+void Game::render_columns(uint8_t at) {
+    constexpr uint8_t kCell = 18;
+    constexpr uint8_t kLeft = (lcd::kWidth - kCell * game::kCols) / 2;
+    for (uint8_t c = 0; c < game::kCols; ++c) {
+        const int32_t s = analysis_.scores[c];
+        char text[8];
+        if (s == bot::kFullColumn) {
+            put(text, ".");
+        } else if (s >= bot::kWinThreshold) {
+            put(put(text, "W"), static_cast<uint32_t>(bot::kWinScore - s));
+        } else if (s <= -bot::kWinThreshold) {
+            put(put(text, "L"), static_cast<uint32_t>(bot::kWinScore + s));
+        } else {
+            const int32_t v = s > 99 ? 99 : (s < -99 ? -99 : s);
+            if (v < 0) {
+                put(put(text, "-"), static_cast<uint32_t>(-v));
+            } else {
+                put(text, static_cast<uint32_t>(v));
+            }
+        }
+        const auto width = static_cast<uint8_t>(std::strlen(text) * lcd::kCharWidth);
+        const auto x = static_cast<uint8_t>(kLeft + c * kCell);
+        screen_.text(static_cast<uint8_t>(x + (kCell - width + 1) / 2), at, text);
+        if (s == analysis_.best) {
+            screen_.invert_line(at, x, kCell);
+        }
+    }
 }
 
 void Game::render_screen() {
     char line[22];
     screen_.clear();
+    const bool debug = settings::values().debug;
+    if (debug && !board_.over()) {
+        render_debug();
+        screen_.show();
+        return;
+    }
 
     if (setup_.vs_bot) {
         std::strcpy(line, "1 PLAYER - ");
@@ -420,13 +559,9 @@ void Game::render_screen() {
             std::strcat(line, "'S TURN");
             centered(screen_, 1, line);
         }
-        if (settings::values().debug) {
-            render_debug();
-        } else {
-            centered(screen_, 2, "HOLD=MENU");
-            if (!bot_turn()) {
-                centered(screen_, 3, "TURN=AIM  CLICK=DROP");
-            }
+        centered(screen_, 2, "HOLD=MENU");
+        if (!bot_turn()) {
+            centered(screen_, 3, "TURN=AIM  CLICK=DROP");
         }
     } else {
         if (result == Result::Draw) {
@@ -438,7 +573,7 @@ void Game::render_screen() {
         } else {
             centered(screen_, 1, result == Result::RedWins ? "RED WINS!" : "YELLOW WINS!");
         }
-        centered(screen_, 2, "HOLD=MENU");
+        centered(screen_, 2, debug ? "HOLD=MENU 2X=UNDO" : "HOLD=MENU");
         centered(screen_, 3, "CLICK=PLAY AGAIN");
     }
     screen_.show();
